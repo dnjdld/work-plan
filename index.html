@@ -62,6 +62,12 @@
   .grid .span3{grid-column:span 3}
   .grid .span4{grid-column:span 4}
   @media(max-width:760px){.grid{grid-template-columns:repeat(2,1fr)}.grid .span2,.grid .span3,.grid .span4{grid-column:span 2}}
+  @media(max-width:480px){
+    body{padding:10px}
+    .card{padding:14px 12px}
+    header{align-items:flex-start}
+    .settings{width:100%;flex-wrap:wrap}
+  }
 
   .section + .section{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}
   .section-title{
@@ -145,7 +151,9 @@
   .btn-ghost:hover{background:#f1f3f9}
   .btn-export{background:var(--green);color:#fff}
   .btn-export:hover{background:#187e50}
-  .btn-danger{background:transparent;color:#c0392b;border:none;font-size:12px;cursor:pointer}
+  .btn-danger{background:transparent;color:#c0392b;border:none;font-size:12.5px;cursor:pointer;padding:6px 8px;border-radius:6px}
+  .btn-danger:active{background:#f1f3f9}
+  .row-actions{display:flex;gap:2px;flex-wrap:nowrap}
 
   .actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 
@@ -180,7 +188,7 @@
     font-size:11.5px;font-weight:700;color:var(--navy-2);background:#fafbfe;
     border-bottom:1px solid var(--line);line-height:1.25;
   }
-  .tt-track{position:relative;background-image:repeating-linear-gradient(to bottom,var(--line) 0,var(--line) 1px,transparent 1px,transparent 60px);user-select:none;cursor:crosshair}
+  .tt-track{position:relative;background-image:repeating-linear-gradient(to bottom,var(--line) 0,var(--line) 1px,transparent 1px,transparent 60px);user-select:none;cursor:crosshair;touch-action:none}
   .tt-core-shade{position:absolute;left:0;right:0;background:rgba(27,42,74,0.07);pointer-events:none;z-index:0}
   .tt-drag-ghost{
     background:#fff2d6!important;border:1.5px dashed var(--amber)!important;color:#8a5a00!important;
@@ -190,27 +198,27 @@
     position:absolute;left:5px;right:5px;border-radius:8px;
     background:var(--blue-light);border:1px solid #b9c9f5;color:var(--navy-2);
     padding:5px 7px;font-size:11px;overflow:hidden;cursor:grab;
-    box-shadow:0 1px 2px rgba(20,30,70,.06);transition:filter .1s;
+    box-shadow:0 1px 2px rgba(20,30,70,.06);transition:filter .1s;touch-action:none;
   }
   .tt-block:hover{filter:brightness(0.97)}
   .tt-block-dragging{opacity:0.85;box-shadow:0 6px 16px rgba(20,30,70,.25)!important;z-index:10;cursor:grabbing}
   .tt-del-x{
     position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;
     background:#c0392b;color:#fff;font-size:15px;line-height:22px;text-align:center;
-    cursor:pointer;opacity:0;transition:opacity .12s;z-index:5;font-weight:700;
-    box-shadow:0 2px 6px rgba(0,0,0,.25);
+    cursor:pointer;opacity:0.22;transition:opacity .12s;z-index:5;font-weight:700;
+    box-shadow:0 2px 6px rgba(0,0,0,.25);touch-action:none;
   }
   .tt-block:hover .tt-del-x{opacity:1}
   .tt-del-x:hover{background:#8e2418;transform:translate(-50%,-50%) scale(1.08)}
 
-  .tt-resize-handle{position:absolute;left:6px;right:6px;height:9px;z-index:6;cursor:ns-resize}
+  .tt-resize-handle{position:absolute;left:6px;right:6px;height:14px;z-index:6;cursor:ns-resize;touch-action:none}
   .tt-resize-handle::after{
     content:"";position:absolute;left:50%;transform:translateX(-50%);
-    width:26px;height:3px;border-radius:2px;background:var(--navy);opacity:0;transition:opacity .12s;
+    width:26px;height:3px;border-radius:2px;background:var(--navy);opacity:0.25;transition:opacity .12s;
   }
-  .tt-resize-top{top:-3px}
+  .tt-resize-top{top:-5px}
   .tt-resize-top::after{top:3px}
-  .tt-resize-bottom{bottom:-3px}
+  .tt-resize-bottom{bottom:-5px}
   .tt-resize-bottom::after{bottom:3px}
   .tt-block:hover .tt-resize-handle::after{opacity:0.5}
   .tt-resize-handle:hover::after{opacity:0.95;background:var(--blue)}
@@ -989,9 +997,11 @@ function render(){
       <td class="num">${e.ntime||0}</td>
       <td class="num">${e.nratio||0}%</td>
       <td style="white-space:nowrap">
-        <button class="btn-danger" style="color:var(--blue)" data-act="edit" data-id="${e.id}">수정</button>
-        <button class="btn-danger" style="color:var(--ink-2)" data-act="copy" data-id="${e.id}">복사</button>
-        <button class="btn-danger" data-act="del" data-id="${e.id}">삭제</button>
+        <div class="row-actions">
+          <button class="btn-danger" style="color:var(--blue)" data-act="edit" data-id="${e.id}">수정</button>
+          <button class="btn-danger" style="color:var(--ink-2)" data-act="copy" data-id="${e.id}">복사</button>
+          <button class="btn-danger" data-act="del" data-id="${e.id}">삭제</button>
+        </div>
       </td>
     `;
     rowsBody.appendChild(tr);
@@ -1000,10 +1010,20 @@ function render(){
     btn.addEventListener('click', async ()=>{
       const id = btn.dataset.id, act = btn.dataset.act;
       if(act === 'del'){
+        const target = entries.find(e=>e.id === id);
+        if(!target) return;
+        if(!(await showDialog(`"${target.title||'이 업무'}" 항목을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`, {okText:'삭제'}))) return;
         entries = entries.filter(e=>e.id !== id);
+        if(editingId === id){
+          editingId = null;
+          updateFormModeUI();
+          fullFormReset();
+        }
         await saveEntries();
         render();
         renderTimetable();
+        status.textContent = "업무일지가 삭제되었습니다.";
+        setTimeout(()=>status.textContent="", 2000);
       } else if(act === 'edit'){
         editEntry(id);
       } else if(act === 'copy'){
@@ -1032,12 +1052,18 @@ function validateForm(){
   REQUIRED_FIELDS.forEach(f=>{
     const ok = f.check(f.el);
     f.el.classList.toggle('input-error', !ok);
-    if(!ok) missing.push(f.label);
+    if(!ok){
+      missing.push(f.label);
+      const sec = f.el.closest('.section');
+      if(sec) sec.classList.remove('collapsed');
+    }
   });
   if(startEl.value && endEl.value && toMinutes(endEl.value) <= toMinutes(startEl.value)){
     startEl.classList.add('input-error');
     endEl.classList.add('input-error');
     missing.push('종료 시간 (시작 시간보다 늦어야 함)');
+    const sec = startEl.closest('.section');
+    if(sec) sec.classList.remove('collapsed');
   }
   return missing;
 }
@@ -1260,6 +1286,7 @@ function findLatestEntryForCode(fnCode){
 }
 
 function applyQuickChip(e){
+  if(editingId){ editingId = null; updateFormModeUI(); } // 편집 중이던 다른 항목을 실수로 덮어쓰지 않도록 편집 모드 해제
   const m = MASTER.find(m => m.fnCode === e.fnCode);
   if(m){
     taskSel.value = m.taskDesc;
@@ -1331,7 +1358,7 @@ function softReset(){
 function fullFormReset(){
   taskSel.value = ""; selected = null;
   codeField.value = ""; fcPreview.classList.remove('show');
-  gubun.value = "수행(KPI)"; pcode.value = "";
+  gubun.value = ""; pcode.value = "";
   softReset();
 }
 
@@ -1345,6 +1372,7 @@ $('clearAllBtn').addEventListener('click', async ()=>{
   if(!entries.length) return;
   if(!(await showDialog("누적된 모든 업무일지를 삭제할까요? 이 작업은 되돌릴 수 없습니다.", {okText:'전체 삭제'}))) return;
   entries = [];
+  if(editingId){ editingId = null; updateFormModeUI(); fullFormReset(); }
   await saveEntries();
   render();
   populateTtDates();
@@ -1706,11 +1734,12 @@ function renderTimetable(){
       delX.textContent = '×';
       delX.title = '삭제';
       delX.addEventListener('mousedown', (ev)=>{ ev.stopPropagation(); ev.preventDefault(); });
+      delX.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); ev.preventDefault(); });
       delX.addEventListener('click', async (ev)=>{
         ev.stopPropagation();
         if(!(await showDialog(`"${e.title||'이 업무'}" 일정을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`, {okText:'삭제'}))) return;
         entries = entries.filter(x=>x.id !== e.id);
-        if(editingId === e.id){ editingId = null; updateFormModeUI(); }
+        if(editingId === e.id){ editingId = null; updateFormModeUI(); fullFormReset(); }
         await saveEntries();
         render();
         renderTimetable();
@@ -1732,9 +1761,11 @@ function renderTimetable(){
 }
 
 function attachDragSelect(track, dayISO){
-  track.addEventListener('mousedown', (ev)=>{
+  track.addEventListener('pointerdown', (ev)=>{
     if(ev.target.closest('.tt-block')) return; // 기존 블록 클릭은 그대로 둠
+    if(ev.pointerType === 'mouse' && ev.button !== 0) return;
     ev.preventDefault();
+    if(track.setPointerCapture) try{ track.setPointerCapture(ev.pointerId); }catch(e){}
     const rect = track.getBoundingClientRect();
     const startY = ev.clientY - rect.top;
 
@@ -1753,8 +1784,9 @@ function attachDragSelect(track, dayISO){
       ghost.style.height = Math.max(bottom-top, 4)+'px';
     }
     function onUp(mu){
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      track.removeEventListener('pointermove', onMove);
+      track.removeEventListener('pointerup', onUp);
+      track.removeEventListener('pointercancel', onUp);
       const curY = mu.clientY - rect.top;
       const top = Math.max(0, Math.min(startY, curY));
       const bottom = Math.min(track.clientHeight, Math.max(startY, curY));
@@ -1768,6 +1800,7 @@ function attachDragSelect(track, dayISO){
       endMin = Math.max(startMin + 30, Math.min(endMin, TT_END_HOUR*60));
 
       const toHHMM = m => pad(Math.floor(m/60))+":"+pad(m%60);
+      if(editingId){ editingId = null; updateFormModeUI(); } // 편집 중이던 항목을 실수로 덮어쓰지 않도록 편집 모드 해제
       document.querySelector('.section[data-section="1"]').classList.remove('collapsed');
       $('f_date').value = dayISO;
       syncEnddateFromDate();
@@ -1778,15 +1811,18 @@ function attachDragSelect(track, dayISO){
       setTimeout(()=>status.textContent="", 3000);
       scrollToForm();
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    track.addEventListener('pointermove', onMove);
+    track.addEventListener('pointerup', onUp);
+    track.addEventListener('pointercancel', onUp);
   });
 }
 
 function attachBlockDrag(block, entry){
-  block.addEventListener('mousedown', (ev)=>{
+  block.addEventListener('pointerdown', (ev)=>{
+    if(ev.pointerType === 'mouse' && ev.button !== 0) return;
     ev.stopPropagation();
     ev.preventDefault();
+    if(block.setPointerCapture) try{ block.setPointerCapture(ev.pointerId); }catch(e){}
 
     const blockRect = block.getBoundingClientRect();
     const grabOffsetY = ev.clientY - blockRect.top;
@@ -1814,8 +1850,9 @@ function attachBlockDrag(block, entry){
     }
 
     function onUp(){
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      block.removeEventListener('pointermove', onMove);
+      block.removeEventListener('pointerup', onUp);
+      block.removeEventListener('pointercancel', onUp);
       block.classList.remove('tt-block-dragging');
 
       if(!moved){
@@ -1839,13 +1876,15 @@ function attachBlockDrag(block, entry){
         saveEntries();
         render();
         renderTimetable();
+        if(editingId === entry.id){ editingId = null; updateFormModeUI(); } // 편집 중이던 폼이 낡은 값으로 남아 저장을 덮어쓰지 않도록
         status.textContent = `일정이 ${newDate} ${toHHMM(startMin)}~${toHHMM(endMin)}로 이동되었습니다.`;
         setTimeout(()=>status.textContent="", 2500);
       }
     }
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    block.addEventListener('pointermove', onMove);
+    block.addEventListener('pointerup', onUp);
+    block.addEventListener('pointercancel', onUp);
   });
 }
 
@@ -1853,9 +1892,11 @@ function attachResizeHandle(block, entry, edge){
   const handle = document.createElement('div');
   handle.className = 'tt-resize-handle tt-resize-' + edge;
 
-  handle.addEventListener('mousedown', (ev)=>{
+  handle.addEventListener('pointerdown', (ev)=>{
+    if(ev.pointerType === 'mouse' && ev.button !== 0) return;
     ev.stopPropagation();
     ev.preventDefault();
+    if(handle.setPointerCapture) try{ handle.setPointerCapture(ev.pointerId); }catch(e){}
 
     const track = block.parentElement;
     const startTop = parseFloat(block.style.top);
@@ -1881,8 +1922,9 @@ function attachResizeHandle(block, entry, edge){
     }
 
     function onUp(){
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
 
       const finalTop = parseFloat(block.style.top);
       const finalHeight = parseFloat(block.style.height);
@@ -1903,20 +1945,25 @@ function attachResizeHandle(block, entry, edge){
       const toHHMM = m => pad(Math.floor(m/60))+":"+pad(m%60);
       const idx = entries.findIndex(x=>x.id === entry.id);
       if(idx > -1){
+        const newHours = Math.round(((newEndMin - newStartMin)/60) * 4) / 4; // 15분 단위 반올림 (금주시간 계산과 동일 규칙)
         entries[idx].start = toHHMM(newStartMin);
         entries[idx].end = toHHMM(newEndMin);
+        entries[idx].wtime = newHours;
+        entries[idx].wratio = autoRatio(newHours);
         saveEntries();
         render();
         renderTimetable();
-        status.textContent = `일정 시간이 ${toHHMM(newStartMin)}~${toHHMM(newEndMin)}로 변경되었습니다.`;
+        if(editingId === entry.id){ editingId = null; updateFormModeUI(); } // 편집 중이던 폼이 낡은 값으로 남아 저장을 덮어쓰지 않도록
+        status.textContent = `일정 시간이 ${toHHMM(newStartMin)}~${toHHMM(newEndMin)}(${newHours}시간)로 변경되었습니다.`;
         setTimeout(()=>status.textContent="", 2500);
       } else {
         renderTimetable();
       }
     }
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
   });
 
   block.appendChild(handle);
