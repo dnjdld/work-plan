@@ -1,0 +1,2044 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="app-version" content="2026-08-27-01">
+<title>업무일지 입력 프로그램</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#1b2a4a;
+    --navy-2:#25396b;
+    --blue:#3461eb;
+    --blue-light:#e8edfc;
+    --paper:#f6f7fb;
+    --card:#ffffff;
+    --line:#dfe3ee;
+    --ink:#1c2333;
+    --ink-2:#5a6275;
+    --amber:#f5a524;
+    --green:#1f9d63;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    padding:24px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    margin-bottom:18px;flex-wrap:wrap;gap:10px;
+  }
+  header h1{
+    font-size:20px;margin:0;letter-spacing:-0.2px;color:var(--navy);
+  }
+  header .sub{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+  .settings{
+    display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);
+    background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;
+  }
+  .settings input{width:52px;border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:12.5px}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px 22px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    font-size:13px;margin:0 0 14px 0;color:var(--navy-2);
+    text-transform:uppercase;letter-spacing:0.6px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .card h2::before{content:"";width:4px;height:13px;background:var(--blue);border-radius:2px;display:inline-block}
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .grid .span2{grid-column:span 2}
+  .grid .span3{grid-column:span 3}
+  .grid .span4{grid-column:span 4}
+  @media(max-width:760px){.grid{grid-template-columns:repeat(2,1fr)}.grid .span2,.grid .span3,.grid .span4{grid-column:span 2}}
+
+  .section + .section{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}
+  .section-title{
+    cursor:pointer;user-select:none;display:flex;align-items:center;gap:9px;
+    font-size:12px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:0.5px;
+    margin-bottom:14px;
+  }
+  .section-title .num{
+    width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;
+    font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .section-title .section-caret{margin-left:auto;font-size:11px;color:var(--ink-2);transition:transform .15s}
+  .section.collapsed .section-caret{transform:rotate(-90deg)}
+  .section.collapsed .section-body{display:none}
+  .section-title:hover{color:var(--blue)}
+  .section-title:hover .num{background:var(--navy-2)}
+
+  label{display:block;font-size:11.5px;color:var(--ink-2);margin-bottom:5px;font-weight:600}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;
+    font-size:13.5px;background:#fff;color:var(--ink);font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue)}
+  .input-error{border-color:#c0392b!important;background:#fff5f5}
+  .input-error:focus{outline:2px solid #c0392b!important}
+
+  .chip{
+    display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    background:var(--blue-light);border:1px solid #c9d6f8;border-radius:8px;
+    padding:6px 10px;cursor:pointer;font-size:11.5px;color:var(--navy-2);
+    transition:filter .1s;max-width:220px;
+  }
+  .chip:hover{filter:brightness(0.96)}
+  .chip .chip-code{font-family:var(--mono);font-weight:700;color:var(--navy);font-size:10.5px}
+  .chip .chip-title{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+  input[readonly]{background:#f1f3f9;color:var(--ink-2)}
+  textarea{resize:vertical;min-height:54px}
+
+  .task-combo{position:relative}
+  .task-dropdown{
+    display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;
+    background:#fff;border:1px solid var(--line);border-radius:8px;
+    max-height:320px;overflow-y:auto;box-shadow:0 10px 28px rgba(20,30,70,.14);z-index:30;
+  }
+  .task-dropdown.show{display:block}
+  .task-dropdown-item{padding:9px 12px;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid #f1f3f9}
+  .task-dropdown-item:last-child{border-bottom:none}
+  .task-dropdown-item:hover,.task-dropdown-item.active{background:var(--blue-light)}
+  .task-dropdown-item .tag{
+    display:inline-block;font-size:10px;font-weight:700;color:#187e50;background:#e3f6ec;
+    border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:middle;
+  }
+  .task-dropdown-empty{padding:12px;font-size:12.5px;color:var(--ink-2)}
+
+  .fc-preview{
+    background:var(--blue-light);border:1px solid #c9d6f8;border-radius:8px;
+    padding:10px 12px;font-size:12px;color:var(--navy-2);margin-top:4px;
+    display:none;
+  }
+  .fc-preview.show{display:block}
+  .fc-preview b{font-family:var(--mono);color:var(--navy)}
+
+  .toggle-row{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .toggle-row input{width:auto}
+  .toggle-row span{font-size:12.5px;color:var(--ink-2);font-weight:600}
+
+  .detail-preview{
+    font-family:var(--mono);font-size:12px;background:#fefcf5;border:1px solid #ecd9a0;
+    border-radius:8px;padding:9px 12px;white-space:pre-wrap;color:var(--ink-2);margin-top:6px;
+    box-shadow:0 4px 12px rgba(20,30,70,.08);
+  }
+
+  .btn{
+    border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;
+    cursor:pointer;transition:transform .05s ease;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-primary:hover{background:#2a52d6}
+  .btn-ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
+  .btn-ghost:hover{background:#f1f3f9}
+  .btn-export{background:var(--green);color:#fff}
+  .btn-export:hover{background:#187e50}
+  .btn-danger{background:transparent;color:#c0392b;border:none;font-size:12px;cursor:pointer}
+
+  .actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{
+    text-align:left;font-size:11px;color:var(--ink-2);text-transform:uppercase;
+    letter-spacing:0.4px;padding:9px 8px;border-bottom:2px solid var(--line);white-space:nowrap;
+  }
+  td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:#fafbfe}
+  .code-pill{font-family:var(--mono);background:var(--blue-light);color:var(--navy-2);padding:2px 7px;border-radius:5px;font-size:11.5px}
+  .muted{color:var(--ink-2)}
+  .empty{text-align:center;color:var(--ink-2);padding:36px 0;font-size:13px}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .detail-cell{max-width:280px;white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+  .toolbar .count{font-size:12.5px;color:var(--ink-2)}
+
+  .status{font-size:11.5px;color:var(--ink-2);margin-top:8px;min-height:14px}
+
+  /* timetable */
+  .tt-grid{position:relative;display:flex;min-height:660px;border-top:1px solid var(--line);min-width:680px}
+  .tt-hours{width:52px;flex:none;position:relative}
+  .tt-hours .tt-h-label{
+    position:absolute;left:0;right:6px;text-align:right;font-size:11px;color:var(--ink-2);
+    transform:translateY(-6px);
+  }
+  .tt-day{flex:1;min-width:120px;border-left:1px solid var(--line)}
+  .tt-day-head{
+    height:34px;display:flex;align-items:center;justify-content:center;text-align:center;
+    font-size:11.5px;font-weight:700;color:var(--navy-2);background:#fafbfe;
+    border-bottom:1px solid var(--line);line-height:1.25;
+  }
+  .tt-track{position:relative;background-image:repeating-linear-gradient(to bottom,var(--line) 0,var(--line) 1px,transparent 1px,transparent 60px);user-select:none;cursor:crosshair}
+  .tt-core-shade{position:absolute;left:0;right:0;background:rgba(27,42,74,0.07);pointer-events:none;z-index:0}
+  .tt-drag-ghost{
+    background:#fff2d6!important;border:1.5px dashed var(--amber)!important;color:#8a5a00!important;
+    pointer-events:none;
+  }
+  .tt-block{
+    position:absolute;left:5px;right:5px;border-radius:8px;
+    background:var(--blue-light);border:1px solid #b9c9f5;color:var(--navy-2);
+    padding:5px 7px;font-size:11px;overflow:hidden;cursor:grab;
+    box-shadow:0 1px 2px rgba(20,30,70,.06);transition:filter .1s;
+  }
+  .tt-block:hover{filter:brightness(0.97)}
+  .tt-block-dragging{opacity:0.85;box-shadow:0 6px 16px rgba(20,30,70,.25)!important;z-index:10;cursor:grabbing}
+  .tt-del-x{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;
+    background:#c0392b;color:#fff;font-size:15px;line-height:22px;text-align:center;
+    cursor:pointer;opacity:0;transition:opacity .12s;z-index:5;font-weight:700;
+    box-shadow:0 2px 6px rgba(0,0,0,.25);
+  }
+  .tt-block:hover .tt-del-x{opacity:1}
+  .tt-del-x:hover{background:#8e2418;transform:translate(-50%,-50%) scale(1.08)}
+
+  .tt-resize-handle{position:absolute;left:6px;right:6px;height:9px;z-index:6;cursor:ns-resize}
+  .tt-resize-handle::after{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);
+    width:26px;height:3px;border-radius:2px;background:var(--navy);opacity:0;transition:opacity .12s;
+  }
+  .tt-resize-top{top:-3px}
+  .tt-resize-top::after{top:3px}
+  .tt-resize-bottom{bottom:-3px}
+  .tt-resize-bottom::after{bottom:3px}
+  .tt-block:hover .tt-resize-handle::after{opacity:0.5}
+  .tt-resize-handle:hover::after{opacity:0.95;background:var(--blue)}
+  .tt-block .tt-code{font-family:var(--mono);font-weight:700;color:var(--navy);display:block;font-size:10.5px}
+  .tt-block .tt-title{display:block;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tt-block .tt-time{display:block;font-size:10.5px;color:var(--ink-2);margin-top:2px}
+
+  /* modal */
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(20,25,45,.45);
+    align-items:center;justify-content:center;z-index:50;
+  }
+  .modal-backdrop.show{display:flex}
+  .modal{background:#fff;border-radius:12px;max-width:520px;width:92%;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .modal-head{
+    display:flex;justify-content:space-between;align-items:center;padding:14px 18px;
+    border-bottom:1px solid var(--line);font-weight:700;font-size:14px;color:var(--navy);
+  }
+  .modal-close{background:none;border:none;font-size:20px;color:var(--ink-2);cursor:pointer;line-height:1}
+  .modal-body{padding:16px 18px;font-size:13px}
+  .modal-body dl{margin:0;display:grid;grid-template-columns:96px 1fr;gap:8px 10px}
+  .modal-body dt{color:var(--ink-2);font-weight:600}
+  .modal-body dd{margin:0;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>업무일지 입력 프로그램</h1>
+      <div class="sub">업무설명 선택 → Function Code 자동 연동 · 입력분은 브라우저에 누적 저장 · 언제든 엑셀로 내보내기</div>
+      <div id="runLocationBadge" style="margin-top:6px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px"></div>
+    </div>
+    <div class="settings">
+      주간 총 근무시간
+      <input type="number" id="weekHours" value="40" min="1">
+      시간 (금주/차주 비중 자동계산 기준)
+    </div>
+  </header>
+
+  <div class="card" id="entryFormCard">
+    <h2>새 업무 입력</h2>
+    <div id="editBanner" style="display:none;background:#fff4e0;border:1px solid #f2d49a;color:#8a5a00;font-size:12.5px;padding:8px 12px;border-radius:7px;margin-bottom:12px">
+      기존 업무일지를 수정하는 중입니다. 저장하면 원본 항목이 갱신됩니다.
+    </div>
+    <div class="detail-preview" id="detail_preview" style="position:sticky;top:10px;z-index:20;margin-bottom:16px">상세내용 미리보기가 여기에 표시됩니다.</div>
+
+    <div class="section collapsed" data-section="1">
+      <div class="section-title"><span class="num">1</span>언제 (날짜 · 시간)<span class="section-caret">▾</span></div>
+      <div class="section-body grid">
+        <div>
+          <label>날짜</label>
+          <input type="date" id="f_date">
+        </div>
+        <div class="span3" id="timePresets" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:2px"></div>
+
+        <div>
+          <label>시작 시간 (24시간제)</label>
+          <select id="f_start"></select>
+        </div>
+        <div>
+          <label>종료 시간 (24시간제)</label>
+          <select id="f_end"></select>
+        </div>
+        <div>
+          <label>금주 시간 (자동계산)</label>
+          <input type="text" id="f_wtime" readonly value="0">
+        </div>
+        <div>
+          <label>금주 비중 (%)</label>
+          <input type="number" id="f_wratio" step="1" min="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="section" data-section="2">
+      <div class="section-title"><span class="num">2</span>PJT구분<span class="section-caret">▾</span></div>
+      <div class="section-body grid">
+        <div>
+          <label>구분 (Project Code로 자동결정)</label>
+          <input type="text" id="f_gubun" readonly placeholder="Project Code 선택 시 자동입력">
+        </div>
+
+        <div class="span3">
+          <label>Project Code</label>
+          <div style="display:flex;gap:6px">
+            <select id="f_pcode" style="flex:1"></select>
+            <button class="btn btn-ghost" id="addProjBtn" type="button" style="padding:0 12px;font-size:12px;white-space:nowrap">⚙ 관리</button>
+          </div>
+          <div id="addProjPanel" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fafbfe">
+            <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:8px">등록된 Project Code (수정/삭제, 구분 포함)</div>
+            <div id="projManageList" style="margin-bottom:10px"></div>
+            <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:8px;border-top:1px solid var(--line);padding-top:10px">새 Project Code 추가</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <input type="text" id="newProjCode" placeholder="Project Code (예: 260200)" style="flex:1">
+              <input type="text" id="newProjName" placeholder="프로젝트명 (예: NEW PROJECT)" style="flex:1">
+              <select id="newProjGubun" style="flex:1">
+                <option value="수행(KPI)">수행(KPI)</option>
+                <option value="입찰">입찰</option>
+                <option value="기타(KPI)">기타(KPI)</option>
+                <option value="기타">기타</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost" id="cancelProjBtn" type="button">닫기</button>
+              <button class="btn btn-primary" id="saveProjBtn" type="button">추가</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" data-section="3">
+      <div class="section-title"><span class="num">3</span>업무선택<span class="section-caret">▾</span></div>
+      <div class="section-body grid">
+        <div class="span2">
+          <label>업무설명 (입력해서 검색)</label>
+          <div class="task-combo">
+            <input type="text" id="f_task" placeholder="입력해서 검색 (예: Cable, 회계마감...)" autocomplete="off">
+            <div class="task-dropdown" id="taskDropdown"></div>
+          </div>
+        </div>
+        <div>
+          <label>Function Code</label>
+          <input type="text" id="f_code" readonly placeholder="선택 시 자동입력">
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end">
+          <button class="btn btn-ghost" id="pinTaskBtn" type="button" style="white-space:nowrap;width:100%">📌 이 업무 고정하기</button>
+        </div>
+
+        <div class="span4">
+          <div class="fc-preview" id="fc_preview" style="white-space:nowrap;overflow-x:auto"></div>
+        </div>
+
+        <div class="span4" id="pinnedChipsWrap" style="display:none">
+          <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:6px">📌 장기 진행 업무 (고정)</div>
+          <div id="pinnedChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+        </div>
+        <div class="span4" id="quickChipsWrap" style="display:none">
+          <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:6px">🕓 최근 사용한 업무</div>
+          <div class="span4" id="quickChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:2px"></div>
+        </div>
+
+        <div class="span4">
+          <label>수행 업무 (제목)</label>
+          <input type="text" id="f_title" placeholder="예: MINI AI 개발, 전표 마감">
+        </div>
+      </div>
+    </div>
+
+    <div class="section" data-section="4">
+      <div class="section-title"><span class="num">4</span>진행 상황<span class="section-caret">▾</span></div>
+      <div class="section-body grid">
+        <div>
+          <label>(1) 마감기한</label>
+          <input type="date" id="f_enddate">
+        </div>
+        <div>
+          <label>(2) 진행도 (%)</label>
+          <input type="number" id="f_progress" min="0" max="100" value="0">
+        </div>
+        <div class="span2">
+          <label>(3) 상세내용 (Enter로 줄바꿈 가능)</label>
+          <textarea id="f_memo" rows="2" placeholder="예: 협력사 도면 QC 및 최종 마무리"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="section collapsed" data-section="5">
+      <div class="section-title"><span class="num">5</span>차주 계획<span class="section-caret">▾</span></div>
+      <div class="section-body grid">
+        <div>
+          <label>차주 시간 (예정, 직접입력)</label>
+          <input type="number" id="f_ntime" step="0.5" min="0" value="0">
+        </div>
+        <div>
+          <label>차주 비중 (%)</label>
+          <input type="number" id="f_nratio" step="1" min="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="time_status" style="margin-top:6px"></div>
+
+
+    <div class="actions-row">
+      <button class="btn btn-ghost" id="deleteEntryBtn" type="button" style="display:none;color:#c0392b">삭제</button>
+      <button class="btn btn-ghost" id="cancelEditBtn" type="button" style="display:none">편집 취소</button>
+      <button class="btn btn-ghost" id="resetBtn" type="button">입력 초기화</button>
+      <button class="btn btn-primary" id="addBtn" type="button">+ 일지에 추가</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">시간표로 보기 (주간, 월~금)</h2>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="tt_prev" type="button">◀ 이전 주</button>
+        <span id="tt_week_label" style="font-size:12.5px;color:var(--ink-2);min-width:170px;text-align:center;font-weight:600"></span>
+        <button class="btn btn-ghost" id="tt_next" type="button">다음 주 ▶</button>
+        <button class="btn btn-ghost" id="tt_today" type="button">이번 주</button>
+      </div>
+    </div>
+    <div id="tt_wrap" style="overflow-x:auto">
+      <div id="tt_grid" class="tt-grid"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">누적된 업무일지</h2>
+      <div class="count" id="rowCount">0건</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th><th>Project<br>Code</th><th>Function<br>Code</th>
+            <th>Code Description</th><th>Date</th><th>수행업무(제목)</th><th>수행업무(상세)</th>
+            <th>금주<br>시간</th><th>금주<br>비중</th><th>차주<br>시간</th><th>차주<br>비중</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="emptyMsg">아직 입력된 업무가 없습니다. 위에서 오늘 업무를 추가해보세요.</div>
+    </div>
+
+    <div style="margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fafbfe">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);font-weight:600;margin-bottom:0">
+        <input type="checkbox" id="exportAllChk" checked style="width:auto"> 전체 기간 내보내기
+      </label>
+      <div id="exportRangeControls" style="display:none;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <input type="month" id="exportMonth" style="width:auto">
+        <select id="exportWeekStart" style="width:auto"></select>
+        <span style="color:var(--ink-2);font-size:12.5px">~</span>
+        <select id="exportWeekEnd" style="width:auto"></select>
+      </div>
+    </div>
+
+    <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none">
+    <div class="actions-row">
+      <button class="btn btn-ghost" id="clearAllBtn" type="button">전체 삭제</button>
+      <button class="btn btn-ghost" id="importBtn" type="button">📥 엑셀에서 가져오기</button>
+      <button class="btn btn-export" id="exportBtn" type="button">엑셀로 내보내기</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <span>업무일지 상세</span>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ---------- Function Code 마스터 데이터 ----------
+const MASTER = [
+["General","GA02","성과관리","04","팀 전략과제","팀전략과제 수행"],
+["General","GA07","부서일반","04","내부회계관리(ICAN)/환경경영/품질경영","팀 예산, 인력운영, 교육, 업무목표 수립/업적평가"],
+["General","GA08","사내표준","01","절차서","사내 표준(업무 가이드/양식 절차서) 작성/업적"],
+["General","GA09","정보보안","01","CP 자율점검","팀 CP 준수 사항점검"],
+["General","GA11","회의","02","임원 및 팀장회의","각종 회의(설계전략, 점검, 팀내부 회의 등)"],
+["General","GA17","Lessons Learned(Trouble Shooting)","02","보고자료","하자 도장서/하자 대장 작성 관련"],
+["General","GA18","IT(관리)","01","사내 IT System 운영","팀 IT System 기획 및 전산자원 관리"],
+["General","GD07","Project","01","수행조직 관리","수행 조직 구성"],
+["General","GE04","EPC수행관리 지원","XX","General Supervision & Duties","General Supervision & Duties, 호기, MH 외"],
+["General","GE05","EPC수행_Project Control","02","Project 외주관리(설계/기술)","설계 협력사 외주, 회의, 현장지원, QC, Cost"],
+["XXXX PJT","GA07","부서일반","04","내부회계관리(ICAN)/환경경영/품질경영","예산, 인력운영, 업무목표 수립/점검"],
+["XXXX PJT","GA24","Value Engineering","04","Value Engineering DB","VE/ALTER 발굴 및 검토"],
+["XXXX PJT","GB02","ITB","05","ITB 분석","ITB Review & Clarification"],
+["XXXX PJT","GC02","Proposal","XX","Execution Plan","실행계획, Technical proposal"],
+["XXXX PJT","GD07","Project","03","실행예산관리","실행예산 집행관리, 인가 관련 업무"],
+["XXXX PJT","GE04","EPC수행관리 지원","01","General Supervision & Duties","General Supervision & Duties, 호기, MH 외"],
+["XXXX PJT","GE05","EPC수행_Project Control","XX","Site Survey","설계 협력사 외주, 회의, 현장지원, QC, Cost"],
+["XXXX PJT","PE01","Specification","02","Engineering Specification","Engineering Specification, Design Basis & Calculation"],
+["XXXX PJT","PE02","Calculation","04","Calculation","Calculation"],
+["XXXX PJT","PE03","Drawing","12","Single Line Diagram","Single Line Diagram"],
+["XXXX PJT","PE03","Drawing","13","Electrical Equipment Layout Drawing","Electrical Equipment Layout Drawing"],
+["XXXX PJT","PE03","Drawing","21","Logic and Schematic Diagram","Logic and Schematic Diagram"],
+["XXXX PJT","PE03","Drawing","11","Hazardous Area Classification","Hazardous Area Classification"],
+["XXXX PJT","PE03","Drawing","54","ECMS, Annunciator Panel I/O List","ECMS, Annunciator Panel I/O List"],
+["XXXX PJT","PE03","Drawing","55","Motor Control Schedule","Motor Control Schedule"],
+["XXXX PJT","PE03","Drawing","57","Connection Diagram","Connection Diagram"],
+["XXXX PJT","PE03","Drawing","66","Power Plan Drawing","Power Plan Drawing"],
+["XXXX PJT","PE03","Drawing","75","Cable Route Plan","Cable Route Plan"],
+["XXXX PJT","PE03","Drawing","76","Electrical Cable Tray Layout","Electrical Cable Tray Layout"],
+["XXXX PJT","PE03","Drawing","16","Communication Block Diagram","Communication Block Diagram"],
+["XXXX PJT","PE03","Drawing","15","Lighting Plan Drawing","Lighting Plan DWG"],
+["XXXX PJT","PE03","Drawing","53","Lighting Fixture Schedule","Lighting Fixture Schedule"],
+["XXXX PJT","PE03","Drawing","56","Lighting & Small Power Panelboard Schedule","Lighting & Small Power Panelboard"],
+["XXXX PJT","PE03","Drawing","58","Communication Plan drawing","Communication Plan Drawing"],
+["XXXX PJT","PE03","Drawing","67","Grounding Plan Drawing","Earthing & Lightning Philosophy"],
+["XXXX PJT","PE03","Drawing","68","Lighting Single Line Wiring Diagram","Lighting Single Line Wiring Diagram"],
+["XXXX PJT","PE03","Drawing","69","Electrical Heat Tracing System Drawing","Electrical Heat Tracing System Drawing"],
+["XXXX PJT","PE03","Drawing","70","Cathodic Protection System Drawing","Cathodic Protection System Drawing"],
+["XXXX PJT","PE03","Drawing","72","As-Built","As-Built"],
+["XXXX PJT","PE03","Drawing","59","General notes, Symbol & Legend","General notes, Symbol & Legend"],
+["XXXX PJT","PE03","Drawing","60","Typical installation Detail","Typical Installation Detail"],
+["XXXX PJT","PE04","Document","14","FEED Verification","ITB Review & FEED Verification"],
+["XXXX PJT","PE04","Document","77","RDI 검증 및 견적 검토","RDI 검증 및 견적 검토"],
+["XXXX PJT","PE04","Document","53","VP Review & Control","VP Review & Control"],
+["XXXX PJT","PE04","Document","09","Hazardous Source Schedule","Hazardous Source Schedule"],
+["XXXX PJT","PE04","Document","12","Interface & Tie-In List","Interface & Tie-In List"],
+["XXXX PJT","PE04","Document","52","Modularization","Modularization"],
+["XXXX PJT","PE04","Document","54","타부서 Package 검토","타부서 Package 검토"],
+["XXXX PJT","PE04","Document","07","3D Model Review","3D Model Review"],
+["XXXX PJT","PE04","Document","10","Load & Motor List","ELEC. LOAD & EQUIPMENT LIST (EXCEL)"],
+["XXXX PJT","PE04","Document","11","Cable & Drum Schedule","Cable / Drum Schedule (Excel)"],
+["XXXX PJT","PE04","Document","16","BM","BM"],
+["XXXX PJT","PE04","Document","35","타부서 Information 작성 및 Check","타부서 Information 작성 및 Check"],
+["XXXX PJT","PE04","Document","76","MARKA 작성 & NVK 검토 업무","MARKA 작성 및 검토 업무"],
+["XXXX PJT","PE04","Document","36","QC 수행 결과 보고서","QC 수행 결과 보고서"],
+["XXXX PJT","PE04","Document","02","Equipment Data Sheet","Equipment Data Sheet"],
+["XXXX PJT","PE05","3D Model","XX","Electrical 3D Model","Electrical 3D Model"],
+["XXXX PJT","PF01","구매","01","MR (Material Requisition)","MR (Material Requisition)"],
+["XXXX PJT","PF01","구매","04","TBE (Technical Bid Evaluation)","TBE (Technical Bid Evaluation)"],
+["XXXX PJT","PF01","구매","05","PR (Purchase Requisition)","PR (Purchase Requisition)"],
+["XXXX PJT","PF01","구매","07","VP (Vendor Print)","VP (Vendor Print)"],
+["XXXX PJT","PF03","검사","05","FAT (Factory Acceptance Test)","FAT (Factory Acceptance Test)"]
+].map((r,i)=>({
+  idx:i, pjt:r[0], majorCode:r[1], majorDesc:r[2], minorCode:r[3], minorDesc:r[4], taskDesc:r[5],
+  fnCode: r[1]+"-"+(r[3]||"XX")
+}));
+
+// ---------- 엘리먼트 ----------
+const $ = id => document.getElementById(id);
+
+// ---------- 저장소 래퍼: window.storage(클라우드) + localStorage(브라우저 로컬)를 함께 사용 ----------
+// Claude 아티팩트 미리보기가 아닌, 다운로드한 파일을 직접 브라우저에서 열었을 때는
+// window.storage가 아예 없을 수 있어서, 이 경우에도 데이터가 남도록 localStorage를 항상 병행 저장한다.
+async function persistGet(key){
+  let localVal = null;
+  try{ localVal = localStorage.getItem(key); }catch(e){}
+  let cloudVal = null;
+  if(window.storage && window.storage.get){
+    try{
+      const res = await window.storage.get(key, false);
+      cloudVal = res ? res.value : null;
+    }catch(e){}
+  }
+  return cloudVal !== null && cloudVal !== undefined ? cloudVal : localVal;
+}
+async function persistSet(key, value){
+  let ok = false;
+  try{ localStorage.setItem(key, value); ok = true; }catch(e){}
+  if(window.storage && window.storage.set){
+    try{ await window.storage.set(key, value, false); ok = true; }catch(e){}
+  }
+  return ok;
+}
+
+const taskSel = $('f_task'), codeField = $('f_code'), fcPreview = $('fc_preview');
+const gubun = $('f_gubun'), pcode = $('f_pcode'), title = $('f_title');
+const progress = $('f_progress'), enddate = $('f_enddate'), memo = $('f_memo');
+const detailPreview = $('detail_preview');
+const wtime = $('f_wtime'), wratio = $('f_wratio'), ntime = $('f_ntime'), nratio = $('f_nratio');
+const startEl = $('f_start'), endEl = $('f_end'), timeStatus = $('time_status');
+const weekHoursInput = $('weekHours');
+const rowsBody = $('rows'), rowCount = $('rowCount'), emptyMsg = $('emptyMsg');
+const status = $('status');
+const ttGrid = $('tt_grid'), ttWeekLabel = $('tt_week_label');
+const ttPrevBtn = $('tt_prev'), ttNextBtn = $('tt_next'), ttTodayBtn = $('tt_today');
+const modalBackdrop = $('modalBackdrop'), modalBody = $('modalBody');
+
+// 시작/종료 시간 셀렉트 채우기 (24시간제, 30분 단위) - 주요 업무시간(08:30~17:30)을 별도 그룹으로 강조
+const CORE_START_MIN = 8*60+30, CORE_END_MIN = 17*60+30;
+const LUNCH_START_MIN = 11*60+30, LUNCH_END_MIN = 12*60+30;
+function fillTimeSelect(sel, defaultVal){
+  const coreGroup = document.createElement('optgroup');
+  coreGroup.label = "★ 주요 업무시간 (08:30~17:30)";
+  const otherGroup = document.createElement('optgroup');
+  otherGroup.label = "그 외 (조기출근/야근 등)";
+
+  for(let h=7; h<=22; h++){
+    for(let m=0; m<60; m+=30){
+      if(h === 22 && m === 30) continue; // 22:00 이 마지막
+      const v = pad(h)+":"+pad(m);
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      if(v === defaultVal) o.selected = true;
+      const mins = h*60+m;
+      const isCore = mins >= CORE_START_MIN && mins <= CORE_END_MIN;
+      (isCore ? coreGroup : otherGroup).appendChild(o);
+    }
+  }
+  sel.appendChild(coreGroup);
+  sel.appendChild(otherGroup);
+}
+fillTimeSelect(startEl, "09:00");
+fillTimeSelect(endEl, "10:00");
+
+// 자주 쓰는 시간대 - 원클릭으로 시작/종료 시간 채우기
+const TIME_PRESETS = [
+  {label:"오전 08:30~11:30", s:"08:30", e:"11:30"},
+  {label:"오후 12:30~15:00", s:"12:30", e:"15:00"},
+  {label:"오후 15:00~17:30", s:"15:00", e:"17:30"},
+  {label:"조기출근 07~08:30", s:"07:00", e:"08:30"},
+  {label:"야근 17:30~18:00", s:"17:30", e:"18:00"},
+  {label:"야근 1시간 (17:30~18:30)", s:"17:30", e:"18:30"},
+  {label:"야근 2시간 (17:30~19:30)", s:"17:30", e:"19:30"},
+  {label:"야근 3시간 (17:30~20:30)", s:"17:30", e:"20:30"},
+];
+(function renderTimePresets(){
+  const wrap = $('timePresets');
+  TIME_PRESETS.forEach(p=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.style.padding = '5px 10px';
+    btn.textContent = p.label;
+    btn.addEventListener('click', ()=>{
+      startEl.value = p.s; endEl.value = p.e;
+      updateWorkedTime();
+    });
+    wrap.appendChild(btn);
+  });
+})();
+
+// ---------- Project Code 목록 (기본 4개 + 사용자 추가분, 전부 수정/삭제 가능, 브라우저에 저장) ----------
+const DEFAULT_PROJECTS = [
+  {code:"210025", name:"BALTIC", gubun:"수행(KPI)"},
+  {code:"260120", name:"AM4", gubun:"수행(KPI)"},
+  {code:"250177", name:"LCM", gubun:"수행(KPI)"},
+  {code:"000000", name:"GENERAL", gubun:"기타(KPI)"}
+];
+let projects = [];
+
+function populateProjectSelect(keepValue){
+  const prevVal = keepValue !== undefined ? keepValue : pcode.value;
+  pcode.innerHTML = "";
+  const blank = document.createElement('option');
+  blank.value = ""; blank.textContent = "선택하세요";
+  pcode.appendChild(blank);
+  projects.forEach(p=>{
+    const o = document.createElement('option');
+    o.value = p.code;
+    o.textContent = p.name ? `${p.code} ${p.name}` : p.code;
+    pcode.appendChild(o);
+  });
+  if(projects.some(p=>p.code === prevVal)) pcode.value = prevVal;
+  syncGubunFromProject();
+}
+
+function syncGubunFromProject(){
+  const proj = projects.find(p=>p.code === pcode.value);
+  gubun.value = proj ? (proj.gubun || "") : "";
+  if(gubun.value) gubun.classList.remove('input-error');
+}
+
+async function loadProjects(){
+  try{
+    const raw = await persistGet('worklog_projects');
+    if(raw){
+      projects = JSON.parse(raw);
+      // 이전 버전 데이터 마이그레이션: 구분 값이 없으면 기본값 채움
+      let migrated = false;
+      projects.forEach(p=>{
+        if(!p.gubun){
+          const def = DEFAULT_PROJECTS.find(d=>d.code === p.code);
+          p.gubun = def ? def.gubun : "수행(KPI)";
+          migrated = true;
+        }
+      });
+      if(migrated) await saveProjects();
+    } else {
+      projects = DEFAULT_PROJECTS.map(p=>({...p}));
+      await saveProjects();
+    }
+  }catch(e){ projects = DEFAULT_PROJECTS.map(p=>({...p})); }
+  populateProjectSelect();
+}
+async function saveProjects(){
+  const ok = await persistSet('worklog_projects', JSON.stringify(projects));
+  if(!ok) status.textContent = "Project Code 저장 중 오류가 발생했습니다.";
+}
+
+const GUBUN_OPTIONS = ["수행(KPI)", "입찰", "기타(KPI)", "기타"];
+
+function renderProjManageList(){
+  const wrap = $('projManageList');
+  wrap.innerHTML = "";
+  if(!projects.length){
+    wrap.innerHTML = `<div style="font-size:12px;color:var(--ink-2)">등록된 Project Code가 없습니다.</div>`;
+    return;
+  }
+  projects.forEach((p, i)=>{
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+    const gubunOptionsHtml = GUBUN_OPTIONS.map(g=>`<option value="${g}" ${g===p.gubun?'selected':''}>${g}</option>`).join('');
+    row.innerHTML = `
+      <input type="text" value="${p.code.replace(/"/g,'&quot;')}" data-idx="${i}" data-field="code" style="flex:1;font-family:var(--mono);font-size:12.5px;padding:6px 8px">
+      <input type="text" value="${(p.name||'').replace(/"/g,'&quot;')}" data-idx="${i}" data-field="name" placeholder="프로젝트명" style="flex:1;font-size:12.5px;padding:6px 8px">
+      <select data-idx="${i}" data-field="gubun" style="flex:1;font-size:12.5px;padding:6px 8px">${gubunOptionsHtml}</select>
+      <button type="button" class="btn-danger" data-idx="${i}" title="삭제" style="padding:4px 8px;font-size:12px;flex:none">✕</button>
+    `;
+    wrap.appendChild(row);
+  });
+
+  wrap.querySelectorAll('input, select').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      const idx = parseInt(inp.dataset.idx), field = inp.dataset.field;
+      const val = inp.value.trim ? inp.value.trim() : inp.value;
+      if(field === 'code'){
+        if(!val){ inp.value = projects[idx].code; return; }
+        if(projects.some((p,j)=>j !== idx && p.code === val)){
+          await showDialog("이미 존재하는 Project Code 입니다.", {showCancel:false});
+          inp.value = projects[idx].code;
+          return;
+        }
+        const oldCode = projects[idx].code;
+        projects[idx].code = val;
+        if(oldCode !== val){
+          entries.forEach(e=>{ if(e.pcode === oldCode) e.pcode = val; });
+          await saveEntries();
+          render();
+        }
+      } else if(field === 'gubun'){
+        projects[idx].gubun = val;
+      } else {
+        projects[idx].name = val;
+      }
+      await saveProjects();
+      populateProjectSelect();
+    });
+  });
+
+  wrap.querySelectorAll('button[data-idx]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      const removed = projects[idx];
+      if(!(await showDialog(`"${removed.code}${removed.name ? ' '+removed.name : ''}" 을 삭제할까요?`, {okText:'삭제'}))) return;
+      projects.splice(idx, 1);
+      await saveProjects();
+      populateProjectSelect();
+      renderProjManageList();
+    });
+  });
+}
+
+$('addProjBtn').addEventListener('click', ()=>{
+  const panel = $('addProjPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening) renderProjManageList();
+});
+$('cancelProjBtn').addEventListener('click', ()=>{
+  $('newProjCode').value = ""; $('newProjName').value = "";
+  $('addProjPanel').style.display = 'none';
+});
+$('saveProjBtn').addEventListener('click', async ()=>{
+  const code = $('newProjCode').value.trim();
+  const name = $('newProjName').value.trim();
+  const newGubun = $('newProjGubun').value;
+  if(!code){ showDialog("Project Code를 입력해주세요.", {showCancel:false}); $('newProjCode').classList.add('input-error'); return; }
+  if(projects.some(p=>p.code === code)){ showDialog("이미 존재하는 Project Code 입니다.", {showCancel:false}); return; }
+  $('newProjCode').classList.remove('input-error');
+  projects.push({code, name, gubun:newGubun});
+  await saveProjects();
+  populateProjectSelect(code);
+  renderProjManageList();
+  $('newProjCode').value = ""; $('newProjName').value = "";
+  status.textContent = `Project Code "${code}"가 추가되었습니다.`;
+  setTimeout(()=>status.textContent="", 2500);
+});
+
+// 업무설명 검색용 목록 (최근 7일 이내 사용한 업무를 위쪽에 우선 배치)
+function getOrderedTaskDescs(){
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffISO = cutoff.getFullYear()+"-"+pad(cutoff.getMonth()+1)+"-"+pad(cutoff.getDate());
+
+  const recentCodes = [];
+  const seenCodes = new Set();
+  for(let i = entries.length - 1; i >= 0; i--){
+    const en = entries[i];
+    if(!en.fnCode || en.date < cutoffISO) continue;
+    if(seenCodes.has(en.fnCode)) continue;
+    seenCodes.add(en.fnCode);
+    recentCodes.push(en.fnCode);
+  }
+
+  const list = [];
+  const added = new Set();
+  recentCodes.forEach(code=>{
+    const m = MASTER.find(mm => mm.fnCode === code);
+    if(m && !added.has(m.taskDesc)){
+      list.push({taskDesc: m.taskDesc, recent: true});
+      added.add(m.taskDesc);
+    }
+  });
+  MASTER.forEach(m=>{
+    if(added.has(m.taskDesc)) return;
+    list.push({taskDesc: m.taskDesc, recent: false});
+    added.add(m.taskDesc);
+  });
+  return list;
+}
+
+let selected = null;
+let lastAutoTitle = "";
+let lastAutoEnddate = "";
+
+function syncEnddateFromDate(){
+  const dateVal = $('f_date').value;
+  if(enddate.value === "" || enddate.value === lastAutoEnddate){
+    enddate.value = dateVal;
+    lastAutoEnddate = dateVal;
+    updateDetailPreview();
+  }
+}
+$('f_date').addEventListener('input', syncEnddateFromDate);
+$('f_date').addEventListener('change', syncEnddateFromDate);
+
+function applyMasterMatch(m){
+  selected = m;
+  codeField.value = m.fnCode;
+  fcPreview.innerHTML = `PJT 구분 <b>${m.pjt}</b> · 대분류 <b>${m.majorCode}</b> (${m.majorDesc}) · 중분류 <b>${m.minorCode||'-'}</b> (${m.minorDesc})`;
+  fcPreview.classList.add('show');
+}
+
+function handleTaskValueChange(){
+  const match = MASTER.find(m => m.taskDesc === taskSel.value);
+  if(!match){
+    selected = null;
+    codeField.value = "";
+    fcPreview.classList.remove('show');
+    updateDetailPreview();
+    return;
+  }
+  applyMasterMatch(match);
+  if(title.value === "" || title.value === lastAutoTitle){
+    title.value = selected.taskDesc;
+    lastAutoTitle = selected.taskDesc;
+  }
+  updateDetailPreview();
+}
+
+// ---------- 업무설명 커스텀 드롭다운 (한 번에 여러 줄 표시) ----------
+const taskDropdown = $('taskDropdown');
+
+function renderTaskDropdown(){
+  const q = taskSel.value.trim().toLowerCase();
+  const all = getOrderedTaskDescs();
+  const filtered = q ? all.filter(t => t.taskDesc.toLowerCase().includes(q)) : all;
+
+  taskDropdown.innerHTML = "";
+  if(!filtered.length){
+    taskDropdown.innerHTML = `<div class="task-dropdown-empty">일치하는 업무설명이 없습니다.</div>`;
+  } else {
+    filtered.slice(0, 40).forEach(t=>{
+      const item = document.createElement('div');
+      item.className = 'task-dropdown-item';
+      item.innerHTML = (t.recent ? `<span class="tag">최근</span>` : '') + t.taskDesc;
+      item.addEventListener('mousedown', (ev)=>{
+        ev.preventDefault(); // blur보다 먼저 처리되도록
+        taskSel.value = t.taskDesc;
+        handleTaskValueChange();
+        closeTaskDropdown();
+        title.focus();
+        title.select();
+      });
+      taskDropdown.appendChild(item);
+    });
+  }
+  taskDropdown.classList.add('show');
+}
+function closeTaskDropdown(){ taskDropdown.classList.remove('show'); }
+
+taskSel.addEventListener('focus', renderTaskDropdown);
+taskSel.addEventListener('input', ()=>{ handleTaskValueChange(); renderTaskDropdown(); });
+taskSel.addEventListener('blur', ()=> setTimeout(closeTaskDropdown, 150));
+taskSel.addEventListener('keydown', (ev)=>{
+  if(ev.key === 'Escape') closeTaskDropdown();
+});
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtDate(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr+"T00:00:00");
+  const yy = String(d.getFullYear()).slice(2);
+  return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${yy}`;
+}
+
+function buildDetail(){
+  const ed = enddate.value ? fmtDate(enddate.value) : '';
+  const p = progress.value !== '' ? progress.value : '0';
+  const content = memo.value || '';
+  return `(1) 마감기한 : ${ed}\n(2) 진행도 : ${p}%\n(3) 상세내용 : ${content}`;
+}
+
+function updateDetailPreview(){
+  const d = buildDetail();
+  const dateStr = $('f_date').value || '(날짜 미입력)';
+  const timeStr = (startEl.value && endEl.value) ? `${startEl.value}~${endEl.value}` : '(시간 미입력)';
+  const codeStr = codeField.value || '(Function Code 미선택)';
+  const titleStr = title.value || '(제목 미입력)';
+  const summary = `📌 ${dateStr}  ${timeStr}  ·  ${codeStr}  ·  ${titleStr}`;
+  detailPreview.textContent = summary + "\n\n" + d;
+}
+[progress,enddate,memo,title].forEach(el=>el.addEventListener('input', updateDetailPreview));
+[pcode,startEl,endEl].forEach(el=>el.addEventListener('change', updateDetailPreview));
+$('f_date').addEventListener('input', updateDetailPreview);
+$('f_date').addEventListener('change', updateDetailPreview);
+
+function autoRatio(timeVal){
+  const wh = parseFloat(weekHoursInput.value) || 40;
+  const t = parseFloat(timeVal) || 0;
+  if(t<=0) return 0;
+  return Math.round((t/wh)*100);
+}
+
+function toMinutes(hhmm){
+  if(!hhmm) return null;
+  const [h,m] = hhmm.split(':').map(Number);
+  return h*60+m;
+}
+
+function updateWorkedTime(){
+  const s = toMinutes(startEl.value);
+  const e = toMinutes(endEl.value);
+  if(s===null || e===null || e<=s){
+    wtime.value = "0";
+    wratio.value = 0;
+    timeStatus.textContent = (s!==null && e!==null && e<=s) ? "종료 시간이 시작 시간보다 늦어야 합니다." : "";
+    return;
+  }
+  const hours = Math.round(((e - s)/60) * 4) / 4; // 15분 단위 반올림
+  wtime.value = hours;
+  wratio.value = autoRatio(hours);
+  timeStatus.textContent = "";
+}
+[startEl,endEl].forEach(el=>el.addEventListener('input', updateWorkedTime));
+ntime.addEventListener('input', ()=>{ nratio.value = autoRatio(ntime.value); });
+
+// ---------- 저장/불러오기 ----------
+let entries = [];
+
+async function loadEntries(){
+  try{
+    const raw = await persistGet('worklog_entries');
+    entries = raw ? JSON.parse(raw) : [];
+  }catch(e){ entries = []; }
+  render();
+  populateTtDates();
+  renderTimetable();
+}
+async function saveEntries(){
+  const ok = await persistSet('worklog_entries', JSON.stringify(entries));
+  if(!ok) status.textContent = "저장 중 오류가 발생했습니다. (입력은 화면에 남아있습니다)";
+}
+
+function render(){
+  rowsBody.innerHTML = "";
+  rowCount.textContent = entries.length + "건";
+  emptyMsg.style.display = entries.length ? 'none' : 'block';
+  renderQuickChips();
+  entries.slice().reverse().forEach(e=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${e.gubun||''}</td>
+      <td>${e.pcode||''}</td>
+      <td><span class="code-pill">${e.fnCode||'-'}</span></td>
+      <td class="muted">${e.codeDesc||''}</td>
+      <td>${e.date}</td>
+      <td>${e.title||''}</td>
+      <td class="detail-cell">${(e.detail||'').replace(/</g,'&lt;')}</td>
+      <td class="num">${e.wtime||0}</td>
+      <td class="num">${e.wratio||0}%</td>
+      <td class="num">${e.ntime||0}</td>
+      <td class="num">${e.nratio||0}%</td>
+      <td style="white-space:nowrap">
+        <button class="btn-danger" style="color:var(--blue)" data-act="edit" data-id="${e.id}">수정</button>
+        <button class="btn-danger" style="color:var(--ink-2)" data-act="copy" data-id="${e.id}">복사</button>
+        <button class="btn-danger" data-act="del" data-id="${e.id}">삭제</button>
+      </td>
+    `;
+    rowsBody.appendChild(tr);
+  });
+  rowsBody.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id, act = btn.dataset.act;
+      if(act === 'del'){
+        entries = entries.filter(e=>e.id !== id);
+        await saveEntries();
+        render();
+        renderTimetable();
+      } else if(act === 'edit'){
+        editEntry(id);
+      } else if(act === 'copy'){
+        copyEntry(id);
+      }
+    });
+  });
+}
+
+const REQUIRED_FIELDS = [
+  { el: $('f_date'), label: '날짜', check: el => !!el.value },
+  { el: pcode, label: 'Project Code', check: el => !!el.value },
+  { el: title, label: '수행 업무(제목)', check: el => !!el.value.trim() },
+  { el: enddate, label: '(1) 마감기한', check: el => !!el.value },
+  { el: memo, label: '(3) 상세내용', check: el => !!el.value.trim() },
+  { el: startEl, label: '시작 시간', check: el => !!el.value },
+  { el: endEl, label: '종료 시간', check: el => !!el.value },
+];
+REQUIRED_FIELDS.forEach(f=>{
+  const evt = (f.el.tagName === 'SELECT') ? 'change' : 'input';
+  f.el.addEventListener(evt, ()=>{ if(f.check(f.el)) f.el.classList.remove('input-error'); });
+});
+
+function validateForm(){
+  const missing = [];
+  REQUIRED_FIELDS.forEach(f=>{
+    const ok = f.check(f.el);
+    f.el.classList.toggle('input-error', !ok);
+    if(!ok) missing.push(f.label);
+  });
+  if(startEl.value && endEl.value && toMinutes(endEl.value) <= toMinutes(startEl.value)){
+    startEl.classList.add('input-error');
+    endEl.classList.add('input-error');
+    missing.push('종료 시간 (시작 시간보다 늦어야 함)');
+  }
+  return missing;
+}
+
+let editingId = null;
+
+$('addBtn').addEventListener('click', async ()=>{
+  const missing = validateForm();
+  if(missing.length){
+    showDialog("아래 항목을 입력(또는 확인)해주세요:\n\n- " + missing.join("\n- "), {showCancel:false});
+    status.textContent = "빨간색으로 표시된 항목을 확인해주세요.";
+    return;
+  }
+  const base = {
+    date: $('f_date').value,
+    start: startEl.value,
+    end: endEl.value,
+    gubun: gubun.value,
+    pcode: pcode.value,
+    fnCode: codeField.value,
+    codeDesc: selected ? selected.minorDesc : '',
+    title: title.value,
+    progress: progress.value,
+    enddate: enddate.value,
+    memo: memo.value,
+    detail: buildDetail(),
+    wtime: wtime.value || 0,
+    wratio: wratio.value || 0,
+    ntime: ntime.value || 0,
+    nratio: nratio.value || 0,
+    updatedAt: Date.now()
+  };
+
+  if(editingId){
+    const idx = entries.findIndex(e=>e.id === editingId);
+    if(idx > -1){
+      const merged = { ...entries[idx], ...base };
+      entries.splice(idx, 1);
+      entries.push(merged); // 수정된 항목은 배열 맨 뒤로 옮겨서 "가장 최근"이 항상 배열 순서와 일치하도록 함
+    }
+    status.textContent = "수정 내용이 저장되었습니다.";
+  } else {
+    entries.push({ id: Date.now()+"_"+Math.random().toString(36).slice(2,7), ...base });
+    status.textContent = "업무일지에 추가되었습니다.";
+  }
+  await saveEntries();
+  render();
+  renderTimetable();
+  setTimeout(()=>status.textContent="", 2000);
+
+  const wasEditing = !!editingId;
+  editingId = null;
+  updateFormModeUI();
+
+  if(!wasEditing){
+    const prevEnd = endEl.value;
+    fullFormReset();
+    startEl.value = prevEnd;
+    endEl.value = "";
+    updateWorkedTime();
+  }
+});
+
+function expandAllSections(){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('collapsed'));
+}
+
+function loadEntryToForm(e){
+  expandAllSections();
+  REQUIRED_FIELDS.forEach(f=>f.el.classList.remove('input-error'));
+  $('f_date').value = e.date;
+  startEl.value = e.start || startEl.value;
+  endEl.value = e.end || endEl.value;
+  updateWorkedTime();
+
+  const m = MASTER.find(m => m.fnCode === e.fnCode);
+  if(m){
+    taskSel.value = m.taskDesc;
+    applyMasterMatch(m);
+  } else {
+    taskSel.value = "";
+    selected = null;
+    codeField.value = e.fnCode || "";
+    fcPreview.classList.remove('show');
+  }
+
+  gubun.value = e.gubun || "수행(KPI)";
+  pcode.value = e.pcode || "";
+  title.value = e.title || "";
+  lastAutoTitle = e.title || "";
+  progress.value = e.progress || 0;
+  enddate.value = e.enddate || "";
+  memo.value = e.memo || "";
+  ntime.value = e.ntime || 0;
+  nratio.value = e.nratio || 0;
+  updateDetailPreview();
+}
+
+function updateFormModeUI(){
+  $('addBtn').textContent = editingId ? "수정 내용 저장" : "+ 일지에 추가";
+  $('cancelEditBtn').style.display = editingId ? 'inline-block' : 'none';
+  $('deleteEntryBtn').style.display = editingId ? 'inline-block' : 'none';
+  $('editBanner').style.display = editingId ? 'block' : 'none';
+}
+
+function scrollToForm(){
+  $('entryFormCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function editEntry(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  loadEntryToForm(e);
+  editingId = e.id;
+  updateFormModeUI();
+  scrollToForm();
+}
+
+function copyEntry(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  loadEntryToForm(e);
+  editingId = null;
+  updateFormModeUI();
+  status.textContent = "이전 업무일지 내용을 불러왔습니다. 날짜/진행도를 확인 후 추가해주세요.";
+  scrollToForm();
+}
+
+// ---------- 빠른 입력 도우미 ----------
+let pinnedTasks = [];
+
+async function loadPinned(){
+  try{
+    const raw = await persistGet('worklog_pinned');
+    pinnedTasks = raw ? JSON.parse(raw) : [];
+  }catch(e){ pinnedTasks = []; }
+  renderPinnedChips();
+  renderQuickChips();
+}
+async function savePinned(){
+  const ok = await persistSet('worklog_pinned', JSON.stringify(pinnedTasks));
+  if(!ok) status.textContent = "고정 업무 저장 중 오류가 발생했습니다.";
+}
+
+function renderPinnedChips(){
+  const wrap = $('pinnedChips');
+  wrap.innerHTML = "";
+  $('pinnedChipsWrap').style.display = pinnedTasks.length ? 'block' : 'none';
+  pinnedTasks.forEach((p, i)=>{
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.style.position = 'relative';
+    chip.innerHTML = `<span class="chip-code">${p.fnCode||'-'}</span><span class="chip-title">${p.title||''}</span>`;
+    chip.addEventListener('click', ()=>applyQuickChip(p));
+
+    const x = document.createElement('span');
+    x.textContent = '✕';
+    x.title = '고정 해제';
+    x.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#c0392b;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;cursor:pointer';
+    x.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      pinnedTasks.splice(i, 1);
+      await savePinned();
+      renderPinnedChips();
+    });
+    chip.style.paddingRight = '14px';
+    chip.appendChild(x);
+    wrap.appendChild(chip);
+  });
+}
+
+$('pinTaskBtn').addEventListener('click', async ()=>{
+  if(!codeField.value || !title.value.trim()){
+    showDialog("업무설명(Function Code)과 제목을 먼저 입력한 뒤 고정해주세요.", {showCancel:false});
+    return;
+  }
+  const key = codeField.value + '|' + title.value.trim();
+  if(pinnedTasks.some(p => (p.fnCode+'|'+p.title) === key)){
+    status.textContent = "이미 고정된 업무입니다.";
+    setTimeout(()=>status.textContent="", 2000);
+    return;
+  }
+  pinnedTasks.push({ fnCode: codeField.value, title: title.value.trim(), gubun: gubun.value, pcode: pcode.value });
+  await savePinned();
+  renderPinnedChips();
+  status.textContent = "장기 진행 업무로 고정되었습니다.";
+  setTimeout(()=>status.textContent="", 2000);
+});
+
+function renderQuickChips(){
+  const wrap = $('quickChips');
+  const seen = new Set(pinnedTasks.map(p => p.fnCode||''));
+  const list = [];
+  for(let i = entries.length - 1; i >= 0 && list.length < 6; i--){
+    const e = entries[i];
+    const key = e.fnCode || ('__notitle_'+i); // Function Code 없는 항목은 dedupe 대상에서 제외
+    if(e.fnCode && seen.has(key)) continue;
+    if(e.fnCode) seen.add(key);
+    list.push(e);
+  }
+  wrap.innerHTML = "";
+  $('quickChipsWrap').style.display = list.length ? 'block' : 'none';
+  list.forEach(e=>{
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.innerHTML = `<span class="chip-code">${e.fnCode||'-'}</span><span class="chip-title">${e.title||''}</span>`;
+    chip.addEventListener('click', ()=>applyQuickChip(e));
+    wrap.appendChild(chip);
+  });
+}
+
+function findLatestEntryForCode(fnCode){
+  if(!fnCode) return null;
+  for(let i = entries.length - 1; i >= 0; i--){
+    if(entries[i].fnCode === fnCode) return entries[i];
+  }
+  return null;
+}
+
+function applyQuickChip(e){
+  const m = MASTER.find(m => m.fnCode === e.fnCode);
+  if(m){
+    taskSel.value = m.taskDesc;
+    applyMasterMatch(m);
+  } else {
+    taskSel.value = "";
+    selected = null;
+    codeField.value = e.fnCode || "";
+    fcPreview.classList.remove('show');
+  }
+  title.value = e.title || "";
+  lastAutoTitle = e.title || "";
+  if(e.gubun) gubun.value = e.gubun;
+  if(e.pcode) pcode.value = e.pcode;
+
+  // 실제로 저장된 항목 중 이 Function Code의 가장 최신 내용을 다시 조회해서 반영
+  // (고정 칩은 진행도/상세내용을 따로 들고 있지 않으므로, 항상 최신 저장분을 새로 찾아온다)
+  const latest = findLatestEntryForCode(e.fnCode);
+  if(latest){
+    if(latest.title){ title.value = latest.title; lastAutoTitle = latest.title; }
+    enddate.value = latest.enddate || "";
+    progress.value = latest.progress || 0;
+    memo.value = latest.memo || "";
+  }
+  updateDetailPreview();
+  title.focus();
+}
+
+// Enter 키로 빠르게 추가 (제목 입력창 한정, 상세내용은 Enter로 줄바꿈)
+[title].forEach(el=>{
+  el.addEventListener('keydown', (ev)=>{
+    if(ev.key === 'Enter' && !ev.shiftKey){
+      ev.preventDefault();
+      $('addBtn').click();
+    }
+  });
+});
+
+$('cancelEditBtn').addEventListener('click', ()=>{
+  editingId = null;
+  updateFormModeUI();
+  $('resetBtn').click();
+});
+
+$('deleteEntryBtn').addEventListener('click', async ()=>{
+  if(!editingId) return;
+  if(!(await showDialog("이 업무일지를 삭제할까요? 이 작업은 되돌릴 수 없습니다.", {okText:'삭제'}))) return;
+  entries = entries.filter(e=>e.id !== editingId);
+  await saveEntries();
+  editingId = null;
+  updateFormModeUI();
+  $('resetBtn').click();
+  render();
+  renderTimetable();
+  status.textContent = "업무일지가 삭제되었습니다.";
+  setTimeout(()=>status.textContent="", 2000);
+});
+
+function softReset(){
+  title.value = ""; memo.value = ""; lastAutoTitle = "";
+  ntime.value = 0; nratio.value = 0;
+  progress.value = 0;
+  enddate.value = $('f_date').value;
+  lastAutoEnddate = $('f_date').value;
+  updateDetailPreview();
+  REQUIRED_FIELDS.forEach(f=>f.el.classList.remove('input-error'));
+}
+
+function fullFormReset(){
+  taskSel.value = ""; selected = null;
+  codeField.value = ""; fcPreview.classList.remove('show');
+  gubun.value = "수행(KPI)"; pcode.value = "";
+  softReset();
+}
+
+$('resetBtn').addEventListener('click', ()=>{
+  editingId = null;
+  updateFormModeUI();
+  fullFormReset();
+});
+
+$('clearAllBtn').addEventListener('click', async ()=>{
+  if(!entries.length) return;
+  if(!(await showDialog("누적된 모든 업무일지를 삭제할까요? 이 작업은 되돌릴 수 없습니다.", {okText:'전체 삭제'}))) return;
+  entries = [];
+  await saveEntries();
+  render();
+  populateTtDates();
+  renderTimetable();
+});
+
+// ---------- 월/주차 기준 내보내기 범위 ----------
+function getMonthWeeks(year, monthIdx){ // monthIdx: 0-11
+  const first = new Date(year, monthIdx, 1);
+  const last = new Date(year, monthIdx+1, 0);
+  const weeks = [];
+  let cursor = getMonday(first);
+  let n = 1;
+  while(cursor <= last){
+    weeks.push({ n, start: new Date(cursor), end: addDays(cursor, 6) });
+    cursor = addDays(cursor, 7);
+    n++;
+  }
+  return weeks;
+}
+
+function populateExportWeeks(){
+  const val = $('exportMonth').value; // "YYYY-MM"
+  if(!val) return;
+  const [y, m] = val.split('-').map(Number);
+  const weeks = getMonthWeeks(y, m-1);
+  const fmtShort = d => `${pad(d.getMonth()+1)}/${pad(d.getDate())}`;
+  [$('exportWeekStart'), $('exportWeekEnd')].forEach(sel=>{
+    sel.innerHTML = "";
+    weeks.forEach(w=>{
+      const o = document.createElement('option');
+      o.value = w.n;
+      o.textContent = `${w.n}주차 (${fmtShort(w.start)}~${fmtShort(w.end)})`;
+      sel.appendChild(o);
+    });
+  });
+  $('exportWeekEnd').value = weeks[weeks.length-1].n;
+}
+
+$('exportMonth').addEventListener('change', populateExportWeeks);
+$('exportAllChk').addEventListener('change', ()=>{
+  const showRange = !$('exportAllChk').checked;
+  $('exportRangeControls').style.display = showRange ? 'flex' : 'none';
+  if(showRange && !$('exportMonth').value){
+    const now = new Date();
+    $('exportMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+    populateExportWeeks();
+  }
+});
+
+$('exportBtn').addEventListener('click', ()=>{
+  if(!entries.length){ status.textContent = "내보낼 업무일지가 없습니다."; return; }
+
+  let target = entries;
+  let fnameSuffix = "";
+
+  if(!$('exportAllChk').checked){
+    const val = $('exportMonth').value;
+    if(!val){ status.textContent = "내보낼 월을 선택해주세요."; return; }
+    const [y, m] = val.split('-').map(Number);
+    const weeks = getMonthWeeks(y, m-1);
+    const wStart = weeks.find(w => w.n === parseInt($('exportWeekStart').value));
+    const wEnd = weeks.find(w => w.n === parseInt($('exportWeekEnd').value));
+    if(!wStart || !wEnd){ status.textContent = "주차를 선택해주세요."; return; }
+    const rangeStartISO = toISO(wStart.start < wEnd.start ? wStart.start : wEnd.start);
+    const rangeEndISO = toISO(wStart.end > wEnd.end ? wStart.end : wEnd.end);
+    target = entries.filter(e => e.date >= rangeStartISO && e.date <= rangeEndISO);
+    fnameSuffix = `_${val.replace('-','')}_${$('exportWeekStart').value}-${$('exportWeekEnd').value}주차`;
+    if(!target.length){ status.textContent = "선택한 기간에 해당하는 업무일지가 없습니다."; return; }
+  }
+
+  const header = ["구분","Project Code","Function Code","Code Description","Date","수행 업무(제목)","수행 업무(상세)","금주 시간","금주 비중","차주 시간","차주 비중","시작 시간","종료 시간"];
+  const rows = target.map(e=>[
+    e.gubun, e.pcode, e.fnCode, e.codeDesc, e.date, e.title, e.detail,
+    Number(e.wtime)||0, (Number(e.wratio)||0)/100, Number(e.ntime)||0, (Number(e.nratio)||0)/100,
+    e.start || "", e.end || ""
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws['!cols'] = [{wch:10},{wch:10},{wch:12},{wch:26},{wch:11},{wch:20},{wch:40},{wch:8},{wch:8},{wch:8},{wch:8},{wch:9},{wch:9}];
+  for(let r=1;r<=rows.length;r++){
+    ['I','K'].forEach(col=>{
+      const cell = ws[col+(r+1)];
+      if(cell) cell.z = '0%';
+    });
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "업무일지");
+  const today = new Date();
+  const fname = `업무일지_${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}${fnameSuffix}.xlsx`;
+  XLSX.writeFile(wb, fname);
+});
+
+// ---------- 엑셀 가져오기 (이전에 내보낸 파일을 되돌려 입력) ----------
+function excelDateToISO(val){
+  if(val instanceof Date) return toISO(val);
+  if(typeof val === 'number'){
+    // 엑셀 시리얼 날짜
+    const d = XLSX.SSF.parse_date_code(val);
+    return `${d.y}-${pad(d.m)}-${pad(d.d)}`;
+  }
+  const s = String(val).trim();
+  // YYYY-MM-DD 또는 YYYY/MM/DD 형태
+  const m1 = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(m1) return `${m1[1]}-${pad(+m1[2])}-${pad(+m1[3])}`;
+  return s;
+}
+
+function parseDetailBack(detailRaw){
+  const s = String(detailRaw || "");
+  const m = s.match(/\(1\)\s*마감기한\s*:\s*([^\n]*)\n\(2\)\s*진행도\s*:\s*([\d.]*)\s*%?\n\(3\)\s*상세내용\s*:\s*([\s\S]*)$/);
+  if(!m) return { enddate: "", progress: "", memo: s };
+  const dl = m[1].trim();
+  let enddate = "";
+  const dm = dl.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(dm){
+    let yy = dm[3];
+    if(yy.length === 2) yy = "20"+yy;
+    enddate = `${yy}-${pad(+dm[1])}-${pad(+dm[2])}`;
+  }
+  return { enddate, progress: m[2] || "", memo: m[3] || "" };
+}
+
+function ratioToPercent(v){
+  const n = Number(v) || 0;
+  return n <= 1 ? Math.round(n*100) : Math.round(n);
+}
+
+$('importBtn').addEventListener('click', ()=> $('importFileInput').click());
+
+$('importFileInput').addEventListener('change', async (ev)=>{
+  const file = ev.target.files && ev.target.files[0];
+  if(!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const wsName = wb.SheetNames[0];
+    const ws = wb.Sheets[wsName];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
+
+    if(!rows.length){
+      status.textContent = "가져올 데이터가 없습니다.";
+      ev.target.value = "";
+      return;
+    }
+
+    const existingKeys = new Set(entries.map(e => `${e.date}|${e.fnCode}|${e.title}|${e.wtime}`));
+    const imported = [];
+    let skipped = 0;
+    const dayCursors = {}; // 날짜별로 순서대로 시간을 배정하기 위한 커서 (엑셀에는 실제 시작/종료 시각이 없음)
+
+    function nextSlot(dateKey, wtimeHours){
+      const durationMin = Math.max(30, Math.round((wtimeHours||0.5)*60/30)*30);
+      let start = dayCursors[dateKey] !== undefined ? dayCursors[dateKey] : CORE_START_MIN;
+      if(start >= LUNCH_START_MIN && start < LUNCH_END_MIN) start = LUNCH_END_MIN;
+      let end = start + durationMin;
+      if(start < LUNCH_START_MIN && end > LUNCH_START_MIN){
+        start = LUNCH_END_MIN;
+        end = start + durationMin;
+      }
+      if(end > TT_END_HOUR*60){ end = TT_END_HOUR*60; start = Math.max(TT_START_HOUR*60, end - durationMin); }
+      dayCursors[dateKey] = end;
+      return { start, end };
+    }
+    const toHHMMImp = m => pad(Math.floor(m/60))+":"+pad(m%60);
+
+    function excelTimeToHHMM(val){
+      if(val === "" || val === undefined || val === null) return "";
+      if(val instanceof Date) return pad(val.getHours())+":"+pad(val.getMinutes());
+      if(typeof val === 'number'){
+        const totalMin = Math.round(val*24*60);
+        return pad(Math.floor(totalMin/60)%24)+":"+pad(totalMin%60);
+      }
+      const s = String(val).trim();
+      const m = s.match(/^(\d{1,2}):(\d{2})/);
+      return m ? pad(+m[1])+":"+pad(+m[2]) : "";
+    }
+
+    rows.forEach(row=>{
+      const date = excelDateToISO(row['Date']);
+      const fnCode = row['Function Code'] || "";
+      const title = row['수행 업무(제목)'] || "";
+      const wtime = Number(row['금주 시간']) || 0;
+      const key = `${date}|${fnCode}|${title}|${wtime}`;
+      if(existingKeys.has(key)){ skipped++; return; }
+      existingKeys.add(key);
+
+      const realStart = excelTimeToHHMM(row['시작 시간']);
+      const realEnd = excelTimeToHHMM(row['종료 시간']);
+      let start, end;
+      if(realStart && realEnd){
+        start = realStart; end = realEnd; // 엑셀에 실제 시각이 있으면 그대로 사용
+      } else {
+        const slot = nextSlot(date, wtime); // 없으면(예전 파일) 순서대로 임시 배정
+        start = toHHMMImp(slot.start); end = toHHMMImp(slot.end);
+      }
+
+      const parsed = parseDetailBack(row['수행 업무(상세)']);
+      imported.push({
+        id: Date.now()+"_"+Math.random().toString(36).slice(2,7),
+        date, start, end,
+        gubun: row['구분'] || "",
+        pcode: row['Project Code'] !== undefined ? String(row['Project Code']) : "",
+        fnCode,
+        codeDesc: row['Code Description'] || "",
+        title,
+        progress: parsed.progress,
+        enddate: parsed.enddate,
+        memo: parsed.memo,
+        detail: row['수행 업무(상세)'] || "",
+        wtime,
+        wratio: ratioToPercent(row['금주 비중']),
+        ntime: Number(row['차주 시간']) || 0,
+        nratio: ratioToPercent(row['차주 비중']),
+        updatedAt: Date.now()
+      });
+    });
+
+    imported.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    entries.push(...imported);
+    await saveEntries();
+    render();
+    renderTimetable();
+
+    status.textContent = `${imported.length}건을 가져왔습니다${skipped ? ` (중복 ${skipped}건 제외)` : ''}. "시작 시간/종료 시간" 열이 있으면 그 값을 그대로 쓰고, 없으면(예전 파일) 순서대로 임시 배정됩니다.`;
+    setTimeout(()=>status.textContent="", 5000);
+  }catch(err){
+    await showDialog("엑셀 파일을 읽는 중 오류가 발생했습니다. 이 프로그램에서 내보낸 파일 형식인지 확인해주세요.", {showCancel:false});
+  }
+  ev.target.value = "";
+});
+
+// ---------- 시간표 보기 (주간, 월~금) ----------
+const TT_START_HOUR = 7;   // 07:00 부터
+const TT_END_HOUR = 22;    // 22:00 까지
+const TT_HOUR_PX = 60;
+const DAY_LABELS = ['일','월','화','수','목','금','토'];
+
+function getMonday(dateObj){
+  const d = new Date(dateObj);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function toISO(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function addDays(d, n){ const nd = new Date(d); nd.setDate(nd.getDate()+n); return nd; }
+
+let ttWeekStart = getMonday(new Date());
+
+// 더 이상 사용하지 않지만 다른 곳에서의 호출과의 호환을 위해 남겨둠
+function populateTtDates(){}
+
+// 같은 시간대에 겹치는 업무들을 옆으로 나란히 배치하기 위한 레이아웃 계산
+function layoutDayEntries(dayEntries){
+  const items = dayEntries
+    .map(e => ({ e, s: toMinutes(e.start), en: toMinutes(e.end) }))
+    .sort((a,b) => a.s - b.s || a.en - b.en);
+
+  const clusters = [];
+  let current = [];
+  let currentEnd = -Infinity;
+  items.forEach(it=>{
+    if(current.length && it.s >= currentEnd){
+      clusters.push(current);
+      current = [];
+      currentEnd = -Infinity;
+    }
+    current.push(it);
+    currentEnd = Math.max(currentEnd, it.en);
+  });
+  if(current.length) clusters.push(current);
+
+  const result = [];
+  clusters.forEach(cluster=>{
+    const colEnds = []; // 각 컬럼에 마지막으로 배치된 종료시간
+    const colOf = [];
+    cluster.forEach(it=>{
+      let placedCol = -1;
+      for(let c=0; c<colEnds.length; c++){
+        if(colEnds[c] <= it.s){ placedCol = c; break; }
+      }
+      if(placedCol === -1){ placedCol = colEnds.length; colEnds.push(it.en); }
+      else colEnds[placedCol] = it.en;
+      colOf.push(placedCol);
+    });
+    const colCount = colEnds.length;
+    cluster.forEach((it, i)=>{
+      result.push({ e: it.e, s: it.s, en: it.en, col: colOf[i], colCount });
+    });
+  });
+  return result;
+}
+
+function renderTimetable(){
+  ttGrid.innerHTML = "";
+  const monday = ttWeekStart;
+  const friday = addDays(monday, 4);
+  ttWeekLabel.textContent = `${toISO(monday)} ~ ${toISO(friday)}`;
+
+  const hoursEl = document.createElement('div');
+  hoursEl.className = 'tt-hours';
+  hoursEl.style.height = ((TT_END_HOUR-TT_START_HOUR)*TT_HOUR_PX + 34)+'px';
+  for(let h=TT_START_HOUR; h<=TT_END_HOUR; h++){
+    const lab = document.createElement('div');
+    lab.className = 'tt-h-label';
+    lab.style.top = ((h-TT_START_HOUR)*TT_HOUR_PX + 34)+'px';
+    lab.textContent = pad(h)+':00';
+    hoursEl.appendChild(lab);
+  }
+  ttGrid.appendChild(hoursEl);
+
+  for(let i=0; i<5; i++){
+    const dayDate = addDays(monday, i);
+    const dayISO = toISO(dayDate);
+    const dayEntries = entries.filter(e=>e.date === dayISO && e.start && e.end);
+
+    const dayCol = document.createElement('div');
+    dayCol.className = 'tt-day';
+
+    const head = document.createElement('div');
+    head.className = 'tt-day-head';
+    head.innerHTML = `${DAY_LABELS[dayDate.getDay()]}<br>${pad(dayDate.getMonth()+1)}/${pad(dayDate.getDate())}`;
+    dayCol.appendChild(head);
+
+    const track = document.createElement('div');
+    track.className = 'tt-track';
+    track.dataset.date = dayISO;
+    track.style.height = ((TT_END_HOUR-TT_START_HOUR)*TT_HOUR_PX)+'px';
+
+    const addShade = (fromMin, toMin)=>{
+      const shade = document.createElement('div');
+      shade.className = 'tt-core-shade';
+      shade.style.top = (((fromMin - TT_START_HOUR*60)/60)*TT_HOUR_PX)+'px';
+      shade.style.height = (((toMin - fromMin)/60)*TT_HOUR_PX)+'px';
+      track.appendChild(shade);
+    };
+    addShade(CORE_START_MIN, LUNCH_START_MIN);
+    addShade(LUNCH_END_MIN, CORE_END_MIN);
+
+    const layout = layoutDayEntries(dayEntries);
+    layout.forEach(({e, s, en, col, colCount})=>{
+      const top = ((s - TT_START_HOUR*60)/60)*TT_HOUR_PX;
+      const height = Math.max((((en-s))/60)*TT_HOUR_PX, 22);
+      const widthPct = 100/colCount;
+      const leftPct = col*widthPct;
+      const block = document.createElement('div');
+      block.className = 'tt-block';
+      block.style.top = top+'px';
+      block.style.height = height+'px';
+      block.style.left = `calc(${leftPct}% + 3px)`;
+      block.style.right = 'auto';
+      block.style.width = `calc(${widthPct}% - 6px)`;
+      block.innerHTML = `<span class="tt-code">${e.fnCode||'-'}</span><span class="tt-title">${e.title||''}</span>`;
+      attachBlockDrag(block, e);
+
+      const delX = document.createElement('span');
+      delX.className = 'tt-del-x';
+      delX.textContent = '×';
+      delX.title = '삭제';
+      delX.addEventListener('mousedown', (ev)=>{ ev.stopPropagation(); ev.preventDefault(); });
+      delX.addEventListener('click', async (ev)=>{
+        ev.stopPropagation();
+        if(!(await showDialog(`"${e.title||'이 업무'}" 일정을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`, {okText:'삭제'}))) return;
+        entries = entries.filter(x=>x.id !== e.id);
+        if(editingId === e.id){ editingId = null; updateFormModeUI(); }
+        await saveEntries();
+        render();
+        renderTimetable();
+        status.textContent = "업무일지가 삭제되었습니다.";
+        setTimeout(()=>status.textContent="", 2000);
+      });
+      block.appendChild(delX);
+
+      attachResizeHandle(block, e, 'top');
+      attachResizeHandle(block, e, 'bottom');
+
+      track.appendChild(block);
+    });
+
+    dayCol.appendChild(track);
+    ttGrid.appendChild(dayCol);
+    attachDragSelect(track, dayISO);
+  }
+}
+
+function attachDragSelect(track, dayISO){
+  track.addEventListener('mousedown', (ev)=>{
+    if(ev.target.closest('.tt-block')) return; // 기존 블록 클릭은 그대로 둠
+    ev.preventDefault();
+    const rect = track.getBoundingClientRect();
+    const startY = ev.clientY - rect.top;
+
+    const ghost = document.createElement('div');
+    ghost.className = 'tt-block tt-drag-ghost';
+    ghost.style.top = startY+'px';
+    ghost.style.height = '4px';
+    ghost.innerHTML = '<span class="tt-title">시간 선택 중…</span>';
+    track.appendChild(ghost);
+
+    function onMove(mv){
+      const curY = mv.clientY - rect.top;
+      const top = Math.max(0, Math.min(startY, curY));
+      const bottom = Math.min(track.clientHeight, Math.max(startY, curY));
+      ghost.style.top = top+'px';
+      ghost.style.height = Math.max(bottom-top, 4)+'px';
+    }
+    function onUp(mu){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const curY = mu.clientY - rect.top;
+      const top = Math.max(0, Math.min(startY, curY));
+      const bottom = Math.min(track.clientHeight, Math.max(startY, curY));
+      ghost.remove();
+
+      // px 1개 = 1분 (TT_HOUR_PX = 60)
+      let startMin = Math.round((TT_START_HOUR*60 + top)/30)*30;
+      let endMin = Math.round((TT_START_HOUR*60 + bottom)/30)*30;
+      if(endMin <= startMin) endMin = startMin + 30;
+      startMin = Math.max(TT_START_HOUR*60, Math.min(startMin, TT_END_HOUR*60 - 30));
+      endMin = Math.max(startMin + 30, Math.min(endMin, TT_END_HOUR*60));
+
+      const toHHMM = m => pad(Math.floor(m/60))+":"+pad(m%60);
+      document.querySelector('.section[data-section="1"]').classList.remove('collapsed');
+      $('f_date').value = dayISO;
+      syncEnddateFromDate();
+      startEl.value = toHHMM(startMin);
+      endEl.value = toHHMM(endMin);
+      updateWorkedTime();
+      status.textContent = `${dayISO} ${toHHMM(startMin)}~${toHHMM(endMin)} 시간이 입력창에 반영되었습니다. 나머지 내용을 채워주세요.`;
+      setTimeout(()=>status.textContent="", 3000);
+      scrollToForm();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function attachBlockDrag(block, entry){
+  block.addEventListener('mousedown', (ev)=>{
+    ev.stopPropagation();
+    ev.preventDefault();
+
+    const blockRect = block.getBoundingClientRect();
+    const grabOffsetY = ev.clientY - blockRect.top;
+    const startX = ev.clientX, startY = ev.clientY;
+    const duration = toMinutes(entry.end) - toMinutes(entry.start);
+    let currentTrack = block.parentElement;
+    let moved = false;
+    block.classList.add('tt-block-dragging');
+
+    function onMove(mv){
+      const dx = mv.clientX - startX, dy = mv.clientY - startY;
+      if(Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      if(!moved) return;
+
+      const elUnder = document.elementFromPoint(mv.clientX, mv.clientY);
+      const trackUnder = elUnder ? elUnder.closest('.tt-track') : null;
+      if(trackUnder && trackUnder !== currentTrack){
+        trackUnder.appendChild(block);
+        currentTrack = trackUnder;
+      }
+      const trackRect = currentTrack.getBoundingClientRect();
+      let newTop = (mv.clientY - trackRect.top) - grabOffsetY;
+      newTop = Math.max(0, Math.min(newTop, currentTrack.clientHeight - block.offsetHeight));
+      block.style.top = newTop + 'px';
+    }
+
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      block.classList.remove('tt-block-dragging');
+
+      if(!moved){
+        editEntry(entry.id);
+        return;
+      }
+
+      let topPx = parseFloat(block.style.top);
+      let startMin = Math.round((TT_START_HOUR*60 + topPx)/30)*30;
+      let endMin = startMin + duration;
+      if(startMin < TT_START_HOUR*60){ startMin = TT_START_HOUR*60; endMin = startMin + duration; }
+      if(endMin > TT_END_HOUR*60){ endMin = TT_END_HOUR*60; startMin = endMin - duration; }
+      const newDate = currentTrack.dataset.date;
+      const toHHMM = m => pad(Math.floor(m/60))+":"+pad(m%60);
+
+      const idx = entries.findIndex(x=>x.id === entry.id);
+      if(idx > -1){
+        entries[idx].date = newDate;
+        entries[idx].start = toHHMM(startMin);
+        entries[idx].end = toHHMM(endMin);
+        saveEntries();
+        render();
+        renderTimetable();
+        status.textContent = `일정이 ${newDate} ${toHHMM(startMin)}~${toHHMM(endMin)}로 이동되었습니다.`;
+        setTimeout(()=>status.textContent="", 2500);
+      }
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function attachResizeHandle(block, entry, edge){
+  const handle = document.createElement('div');
+  handle.className = 'tt-resize-handle tt-resize-' + edge;
+
+  handle.addEventListener('mousedown', (ev)=>{
+    ev.stopPropagation();
+    ev.preventDefault();
+
+    const track = block.parentElement;
+    const startTop = parseFloat(block.style.top);
+    const startHeight = parseFloat(block.style.height);
+    const trackMaxHeight = track.clientHeight;
+    const MIN_H = (30/60) * TT_HOUR_PX; // 최소 30분
+
+    function onMove(mv){
+      const trackRect = track.getBoundingClientRect();
+      const y = mv.clientY - trackRect.top;
+
+      if(edge === 'top'){
+        let newTop = Math.min(y, startTop + startHeight - MIN_H);
+        newTop = Math.max(0, newTop);
+        const newHeight = (startTop + startHeight) - newTop;
+        block.style.top = newTop + 'px';
+        block.style.height = newHeight + 'px';
+      } else {
+        let newHeight = Math.max(MIN_H, y - startTop);
+        newHeight = Math.min(newHeight, trackMaxHeight - startTop);
+        block.style.height = newHeight + 'px';
+      }
+    }
+
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+
+      const finalTop = parseFloat(block.style.top);
+      const finalHeight = parseFloat(block.style.height);
+      let newStartMin = Math.round((TT_START_HOUR*60 + finalTop)/30)*30;
+      let newEndMin = Math.round((TT_START_HOUR*60 + finalTop + finalHeight)/30)*30;
+
+      if(newEndMin - newStartMin < 30){
+        if(edge === 'top') newStartMin = newEndMin - 30;
+        else newEndMin = newStartMin + 30;
+      }
+      newStartMin = Math.max(TT_START_HOUR*60, newStartMin);
+      newEndMin = Math.min(TT_END_HOUR*60, newEndMin);
+      if(newEndMin - newStartMin < 30){
+        if(edge === 'top') newEndMin = newStartMin + 30;
+        else newStartMin = newEndMin - 30;
+      }
+
+      const toHHMM = m => pad(Math.floor(m/60))+":"+pad(m%60);
+      const idx = entries.findIndex(x=>x.id === entry.id);
+      if(idx > -1){
+        entries[idx].start = toHHMM(newStartMin);
+        entries[idx].end = toHHMM(newEndMin);
+        saveEntries();
+        render();
+        renderTimetable();
+        status.textContent = `일정 시간이 ${toHHMM(newStartMin)}~${toHHMM(newEndMin)}로 변경되었습니다.`;
+        setTimeout(()=>status.textContent="", 2500);
+      } else {
+        renderTimetable();
+      }
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  block.appendChild(handle);
+}
+
+ttPrevBtn.addEventListener('click', ()=>{ ttWeekStart = addDays(ttWeekStart, -7); renderTimetable(); });
+ttNextBtn.addEventListener('click', ()=>{ ttWeekStart = addDays(ttWeekStart, 7); renderTimetable(); });
+ttTodayBtn.addEventListener('click', ()=>{ ttWeekStart = getMonday(new Date()); renderTimetable(); });
+
+// 네이티브 alert()/confirm()은 일부 미리보기 환경(샌드박스 iframe)에서 막힐 수 있어
+// 화면 내 모달로 직접 확인/알림창을 구현
+function showDialog(message, {okText = "확인", cancelText = "취소", showCancel = true} = {}){
+  return new Promise(resolve=>{
+    modalBody.innerHTML = `
+      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${String(message).replace(/</g,'&lt;')}</div>
+      <div class="actions-row" style="margin-top:18px">
+        ${showCancel ? `<button class="btn btn-ghost" id="dlgCancelBtn" type="button">${cancelText}</button>` : ''}
+        <button class="btn btn-primary" id="dlgOkBtn" type="button">${okText}</button>
+      </div>
+    `;
+    modalBackdrop.classList.add('show');
+    const finish = (result)=>{ modalBackdrop.classList.remove('show'); resolve(result); };
+    $('dlgOkBtn').addEventListener('click', ()=>finish(true));
+    if(showCancel) $('dlgCancelBtn').addEventListener('click', ()=>finish(false));
+  });
+}
+$('modalClose').addEventListener('click', ()=>modalBackdrop.classList.remove('show'));
+modalBackdrop.addEventListener('click', (ev)=>{ if(ev.target===modalBackdrop) modalBackdrop.classList.remove('show'); });
+
+// 입력 흐름을 따라 다음 항목으로 자동 포커스 이동 (① 언제 → ② PJT구분 → ③ 업무선택)
+$('f_date').addEventListener('change', ()=> startEl.focus());
+startEl.addEventListener('change', ()=> endEl.focus());
+endEl.addEventListener('change', ()=> gubun.focus());
+gubun.addEventListener('change', ()=> pcode.focus());
+pcode.addEventListener('change', ()=>{ syncGubunFromProject(); taskSel.focus(); });
+enddate.addEventListener('change', ()=> progress.focus());
+
+// 섹션 접기/펼치기
+document.querySelectorAll('.section-title').forEach(titleEl=>{
+  titleEl.addEventListener('click', ()=>{
+    titleEl.closest('.section').classList.toggle('collapsed');
+  });
+});
+
+// 지금 로컬 파일로 열려있는지, 웹 주소(URL)로 열려있는지 표시
+(function showRunLocationBadge(){
+  const badge = $('runLocationBadge');
+  if(!badge) return;
+  if(location.protocol === 'file:'){
+    badge.style.background = '#f1f3f9';
+    badge.style.color = 'var(--ink-2)';
+    badge.textContent = '📂 로컬 파일로 실행 중 (자동 업데이트 알림 대상 아님)';
+  } else {
+    badge.style.background = '#e8f5ee';
+    badge.style.color = '#187e50';
+    badge.textContent = `🌐 웹 주소로 실행 중: ${location.host}`;
+  }
+})();
+
+// 저장소가 실제로 방문 간에 유지되는지 자체 점검
+(function checkStoragePersistence(){
+  try{
+    const prevVisit = localStorage.getItem('worklog_visited');
+    if(prevVisit === 'true' && !localStorage.getItem('worklog_entries') && !localStorage.getItem('worklog_projects')){
+      // 이전에 방문한 적은 있는데 저장된 데이터가 전혀 없다 -> 이 화면(미리보기)에서는 저장이 유지되지 않는 환경일 가능성이 높음
+      const banner = document.createElement('div');
+      banner.style.cssText = 'max-width:1080px;margin:0 auto 14px;padding:12px 16px;background:#fff4e0;border:1px solid #f2d49a;border-radius:10px;color:#8a5a00;font-size:12.5px;line-height:1.6';
+      banner.innerHTML = '⚠ 이 화면에서는 이전 방문 데이터가 유지되지 않는 것 같아요. Claude 안의 미리보기 화면이라면, 이 파일을 <b>다운로드해서 직접 브라우저에서 열거나</b>, GitHub Pages/Netlify 같은 곳에 올려서 <b>고정된 웹 주소</b>로 접속해서 쓰시면 저장이 정상적으로 유지됩니다.';
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+    localStorage.setItem('worklog_visited', 'true');
+  }catch(e){
+    const banner = document.createElement('div');
+    banner.style.cssText = 'max-width:1080px;margin:0 auto 14px;padding:12px 16px;background:#fdeaea;border:1px solid #f0b8b8;border-radius:10px;color:#a12626;font-size:12.5px;line-height:1.6';
+    banner.innerHTML = '⚠ 이 브라우저 환경에서는 로컬 저장소를 사용할 수 없어 입력 내용이 저장되지 않습니다. 이 파일을 다운로드해서 직접 브라우저(Chrome 등)에서 열어주세요.';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+})();
+
+// ---------- 새 버전 자동 감지 ----------
+// 같은 주소(URL)로 호스팅해서 쓰는 경우, 파일이 업데이트되면 열려있는 화면에 배너로 알려줌.
+// (다운로드한 파일을 그때그때 열어 쓰는 경우엔 매번 새 파일이라 이 체크가 의미 없음 - 정상)
+const CURRENT_APP_VERSION = document.querySelector('meta[name="app-version"]')?.content || "";
+
+function showUpdateBanner(){
+  if($('updateBanner')) return; // 이미 떠있으면 중복 방지
+  const banner = document.createElement('div');
+  banner.id = 'updateBanner';
+  banner.style.cssText = 'position:sticky;top:0;z-index:100;max-width:1080px;margin:0 auto 14px;padding:10px 16px;background:#e8f5ee;border:1px solid #b7e4cb;border-radius:10px;color:#187e50;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:10px';
+  banner.innerHTML = `<span>🔄 새 버전이 있습니다. 새로고침하면 최신 버전으로 업데이트됩니다 (입력하신 데이터는 그대로 유지돼요).</span>`;
+  const btn = document.createElement('button');
+  btn.textContent = '새로고침';
+  btn.className = 'btn btn-primary';
+  btn.style.cssText = 'padding:6px 14px;font-size:12px;flex:none';
+  btn.addEventListener('click', ()=> location.reload());
+  banner.appendChild(btn);
+  document.body.insertBefore(banner, document.body.firstChild);
+}
+
+async function checkForUpdate(){
+  if(!CURRENT_APP_VERSION) return;
+  try{
+    const res = await fetch(location.href.split('#')[0].split('?')[0] + '?_v=' + Date.now(), {cache:'no-store'});
+    if(!res.ok) return;
+    const html = await res.text();
+    const m = html.match(/name="app-version"\s+content="([^"]+)"/);
+    if(m && m[1] && m[1] !== CURRENT_APP_VERSION) showUpdateBanner();
+  }catch(e){ /* 로컬 파일이거나 네트워크 문제면 조용히 무시 */ }
+}
+setInterval(checkForUpdate, 5*60*1000); // 5분마다 확인
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkForUpdate(); });
+
+// 초기화
+$('f_date').value = new Date().toISOString().slice(0,10);
+$('f_enddate').value = $('f_date').value;
+lastAutoEnddate = $('f_date').value;
+updateDetailPreview();
+updateWorkedTime();
+loadProjects();
+loadPinned();
+loadEntries();
+
+</script>
+</body>
+</html>
