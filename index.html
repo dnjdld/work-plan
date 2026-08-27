@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-06">
+<meta name="app-version" content="2026-08-27-08">
 <title>업무일지 입력 프로그램</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
@@ -650,6 +650,7 @@ function fillStartTimeSelects(defaultH, defaultM){
 fillStartTimeSelects("09", "00");
 
 function applyStartAndDuration(){
+  fullDaySplit = null;
   const sh = $('f_start_hour').value, sm = $('f_start_min').value;
   if(!sh || !sm) return;
   const startStr = sh+":"+sm;
@@ -681,7 +682,10 @@ function applyStartAndDuration(){
 $('f_duration').addEventListener('input', applyStartAndDuration);
 
 // 다른 곳(수정 불러오기, 시간표 드래그 등)에서 시작~종료 범위를 그대로 폼에 반영할 때 쓰는 함수
+let fullDaySplit = null; // 종일 프리셋을 쓰면 [{s,e}, {s,e}] 형태로 채워지고, 저장 시 2건으로 나뉨
+
 function setFormTimeFromRange(startStr, endStr){
+  fullDaySplit = null;
   const [sh, sm] = startStr.split(':');
   $('f_start_hour').value = sh;
   $('f_start_min').value = sm;
@@ -697,6 +701,7 @@ function setFormTimeFromRange(startStr, endStr){
 
 // 자주 쓰는 시간대 - 원클릭으로 시작시간+소요시간 채우기
 const TIME_PRESETS = [
+  {label:"종일", segments:[{s:"08:30",e:"11:30"},{s:"12:30",e:"17:30"}]},
   {label:"오전", s:"08:30", e:"11:30"},
   {label:"오후1", s:"12:30", e:"15:00"},
   {label:"오후2", s:"15:00", e:"17:30"},
@@ -705,6 +710,21 @@ const TIME_PRESETS = [
   {label:"야근 2h", s:"17:30", e:"19:30"},
   {label:"야근 3h", s:"17:30", e:"20:30"},
 ];
+function applySplitDayPreset(segments){
+  fullDaySplit = segments;
+  const first = segments[0], last = segments[segments.length-1];
+  const [sh, sm] = first.s.split(':');
+  $('f_start_hour').value = sh;
+  $('f_start_min').value = sm;
+  startEl.value = first.s;
+  endEl.value = last.e;
+  $('f_end_display').value = `${last.e} (점심 제외, 오전/오후 2건으로 저장됨)`;
+  const totalHours = segments.reduce((sum,s)=> sum + (toMinutes(s.e)-toMinutes(s.s))/60, 0);
+  $('f_duration').value = totalHours;
+  wtime.value = totalHours;
+  wratio.value = autoRatio(totalHours);
+  updateDetailPreview();
+}
 (function renderTimePresets(){
   const wrap = $('timePresets');
   TIME_PRESETS.forEach(p=>{
@@ -712,8 +732,13 @@ const TIME_PRESETS = [
     btn.type = 'button';
     btn.className = 'preset-btn';
     btn.textContent = p.label;
-    btn.title = `${p.s} ~ ${p.e}`;
-    btn.addEventListener('click', ()=> setFormTimeFromRange(p.s, p.e));
+    btn.title = p.segments
+      ? `${p.segments[0].s}~${p.segments[0].e}, ${p.segments[1].s}~${p.segments[1].e} (점심 제외, 2건으로 저장)`
+      : `${p.s} ~ ${p.e}`;
+    btn.addEventListener('click', ()=>{
+      if(p.segments) applySplitDayPreset(p.segments);
+      else setFormTimeFromRange(p.s, p.e);
+    });
     wrap.appendChild(btn);
   });
 })();
@@ -1191,10 +1216,24 @@ $('addBtn').addEventListener('click', async ()=>{
       entries.push(merged); // 수정된 항목은 배열 맨 뒤로 옮겨서 "가장 최근"이 항상 배열 순서와 일치하도록 함
     }
     status.textContent = "수정 내용이 저장되었습니다.";
+  } else if(fullDaySplit){
+    // "종일" 프리셋: 점심시간을 실제로 비워두기 위해 오전/오후 2건으로 나눠 저장
+    fullDaySplit.forEach((seg, i)=>{
+      const segHours = Math.round(((toMinutes(seg.e) - toMinutes(seg.s))/60)*4)/4;
+      entries.push({
+        id: Date.now()+"_"+i+"_"+Math.random().toString(36).slice(2,7),
+        ...base,
+        start: seg.s, end: seg.e,
+        wtime: segHours, wratio: autoRatio(segHours),
+        updatedAt: Date.now()
+      });
+    });
+    status.textContent = `업무일지 ${fullDaySplit.length}건(오전/오후)이 추가되었습니다.`;
   } else {
     entries.push({ id: Date.now()+"_"+Math.random().toString(36).slice(2,7), ...base });
     status.textContent = "업무일지에 추가되었습니다.";
   }
+  fullDaySplit = null;
   await saveEntries();
   render();
   renderTimetable();
