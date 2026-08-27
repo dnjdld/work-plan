@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-12">
+<meta name="app-version" content="2026-08-27-14">
 <title>업무일지 입력 프로그램</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
@@ -92,6 +92,7 @@
   }
   input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue)}
   .input-error{border-color:#c0392b!important;background:#fff5f5}
+  .saved-flash{border-color:var(--green)!important;background:#eafaf1!important;transition:background .3s,border-color .3s}
   .input-error:focus{outline:2px solid #c0392b!important}
 
   .chip{
@@ -235,7 +236,6 @@
   .tt-resize-handle:hover::after{opacity:0.95;background:var(--blue)}
   .tt-block .tt-code{font-family:var(--mono);font-weight:700;color:var(--navy);display:block;font-size:10.5px}
   .tt-block .tt-title{display:block;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tt-block .tt-time{display:block;font-size:10.5px;color:var(--ink-2);margin-top:2px}
 
   /* modal */
   .modal-backdrop{
@@ -433,8 +433,6 @@
       </div>
     </div>
 
-    <div class="status" id="time_status" style="margin-top:6px"></div>
-
 
     <div class="actions-row">
       <button class="btn btn-ghost" id="deleteEntryBtn" type="button" style="display:none;color:#c0392b">삭제</button>
@@ -605,7 +603,7 @@ const gubun = $('f_gubun'), pcode = $('f_pcode'), title = $('f_title');
 const progress = $('f_progress'), enddate = $('f_enddate'), memo = $('f_memo');
 const detailPreview = $('detail_preview');
 const wtime = $('f_wtime'), wratio = $('f_wratio'), ntime = $('f_ntime'), nratio = $('f_nratio');
-const startEl = $('f_start'), endEl = $('f_end'), timeStatus = $('time_status');
+const startEl = $('f_start'), endEl = $('f_end');
 const weekHoursInput = $('weekHours');
 const rowsBody = $('rows'), rowCount = $('rowCount'), emptyMsg = $('emptyMsg');
 const status = $('status');
@@ -844,6 +842,12 @@ async function saveProjects(){
 
 const GUBUN_OPTIONS = ["수행(KPI)", "입찰", "기타(KPI)", "기타"];
 
+// 인라인 수정이 저장됐음을 눈에 보이게 확인시켜주는 효과 (테두리 잠깐 초록색으로)
+function flashSaved(el){
+  el.classList.add('saved-flash');
+  setTimeout(()=> el.classList.remove('saved-flash'), 700);
+}
+
 function renderProjManageList(){
   const wrap = $('projManageList');
   wrap.innerHTML = "";
@@ -856,8 +860,8 @@ function renderProjManageList(){
     row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px' + (p.archived ? ';opacity:0.55' : '');
     const gubunOptionsHtml = GUBUN_OPTIONS.map(g=>`<option value="${g}" ${g===p.gubun?'selected':''}>${g}</option>`).join('');
     row.innerHTML = `
-      <input type="text" value="${p.code.replace(/"/g,'&quot;')}" data-idx="${i}" data-field="code" style="flex:1;font-family:var(--mono);font-size:12.5px;padding:6px 8px">
-      <input type="text" value="${(p.name||'').replace(/"/g,'&quot;')}" data-idx="${i}" data-field="name" placeholder="프로젝트명" style="flex:1;font-size:12.5px;padding:6px 8px">
+      <input type="text" value="${escapeHtml(p.code)}" data-idx="${i}" data-field="code" style="flex:1;font-family:var(--mono);font-size:12.5px;padding:6px 8px">
+      <input type="text" value="${escapeHtml(p.name||'')}" data-idx="${i}" data-field="name" placeholder="프로젝트명" style="flex:1;font-size:12.5px;padding:6px 8px">
       <select data-idx="${i}" data-field="gubun" style="flex:1;font-size:12.5px;padding:6px 8px">${gubunOptionsHtml}</select>
       <button type="button" class="btn-danger" data-idx="${i}" data-act="archive" title="${p.archived ? '복원' : '보관 (완료된 프로젝트, 목록에서만 숨김)'}" style="padding:4px 8px;font-size:12px;flex:none;white-space:nowrap">${p.archived ? '복원' : '보관'}</button>
       <button type="button" class="btn-danger" data-idx="${i}" data-act="delete" title="완전 삭제" style="padding:4px 8px;font-size:12px;flex:none">✕</button>
@@ -890,6 +894,9 @@ function renderProjManageList(){
       }
       await saveProjects();
       populateProjectSelect();
+      flashSaved(inp);
+      status.textContent = "저장되었습니다.";
+      setTimeout(()=>status.textContent="", 1500);
     });
   });
 
@@ -1053,6 +1060,13 @@ taskSel.addEventListener('keydown', (ev)=>{
   if(ev.key === 'Escape') closeTaskDropdown();
 });
 
+// 사용자가 입력한 텍스트(제목/상세/프로젝트명 등)를 화면에 그릴 때 항상 이걸 거쳐서
+// <, >, " 같은 문자 때문에 화면이 깨지거나 의도치 않은 태그로 해석되는 걸 막는다
+function escapeHtml(str){
+  if(str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 function pad(n){ return String(n).padStart(2,'0'); }
 function fmtDate(dateStr){
   if(!dateStr) return '';
@@ -1114,7 +1128,6 @@ async function loadEntries(){
     entries = raw ? JSON.parse(raw) : [];
   }catch(e){ entries = []; }
   render();
-  populateTtDates();
   renderTimetable();
 }
 async function saveEntries(){
@@ -1144,13 +1157,13 @@ function render(){
   visible.forEach(e=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${e.gubun||''}</td>
-      <td>${e.pcode||''}</td>
-      <td><span class="code-pill">${e.fnCode||'-'}</span></td>
-      <td class="muted">${e.codeDesc||''}</td>
-      <td>${e.date}</td>
-      <td>${e.title||''}</td>
-      <td class="detail-cell">${(e.detail||'').replace(/</g,'&lt;')}</td>
+      <td>${escapeHtml(e.gubun)}</td>
+      <td>${escapeHtml(e.pcode)}</td>
+      <td><span class="code-pill">${escapeHtml(e.fnCode)||'-'}</span></td>
+      <td class="muted">${escapeHtml(e.codeDesc)}</td>
+      <td>${escapeHtml(e.date)}</td>
+      <td>${escapeHtml(e.title)}</td>
+      <td class="detail-cell">${escapeHtml(e.detail)}</td>
       <td class="num">${e.wtime||0}</td>
       <td class="num">${e.wratio||0}%</td>
       <td class="num">${e.ntime||0}</td>
@@ -1409,7 +1422,7 @@ function renderPinnedChips(){
     chip.type = 'button';
     chip.className = 'chip';
     chip.style.position = 'relative';
-    chip.innerHTML = `<span class="chip-code">${p.fnCode||'-'}</span><span class="chip-title">${p.title||''}</span>`;
+    chip.innerHTML = `<span class="chip-code">${escapeHtml(p.fnCode)||'-'}</span><span class="chip-title">${escapeHtml(p.title)}</span>`;
     chip.addEventListener('click', ()=>applyQuickChip(p));
 
     const x = document.createElement('span');
@@ -1463,7 +1476,7 @@ function renderQuickChips(){
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip';
-    chip.innerHTML = `<span class="chip-code">${e.fnCode||'-'}</span><span class="chip-title">${e.title||''}</span>`;
+    chip.innerHTML = `<span class="chip-code">${escapeHtml(e.fnCode)||'-'}</span><span class="chip-title">${escapeHtml(e.title)}</span>`;
     chip.addEventListener('click', ()=>applyQuickChip(e));
     wrap.appendChild(chip);
   });
@@ -1475,6 +1488,20 @@ function findLatestEntryForCode(fnCode){
     if(entries[i].fnCode === fnCode) return entries[i];
   }
   return null;
+}
+
+// 진행도는 "가장 최근 저장"이 아니라, 지금까지 기록된 것 중 "가장 큰 %"를 가져온다
+// (예: 예전에 실수로 낮은 진행도로 backfill 저장한 게 나중에 저장돼도, 진행도가 거꾸로 줄어보이지 않도록)
+function findMaxProgressForCode(fnCode){
+  if(!fnCode) return null;
+  let best = null;
+  entries.forEach(en=>{
+    if(en.fnCode !== fnCode) return;
+    const p = parseFloat(en.progress);
+    if(isNaN(p)) return;
+    if(!best || p > parseFloat(best.progress)) best = en;
+  });
+  return best;
 }
 
 async function applyQuickChip(e){
@@ -1503,17 +1530,20 @@ async function applyQuickChip(e){
   if(latest){
     if(latest.title){ title.value = latest.title; lastAutoTitle = latest.title; }
     enddate.value = latest.enddate || "";
-    progress.value = latest.progress || 0;
     memo.value = latest.memo || "";
   }
+  // 진행도만큼은 "최근 저장"이 아니라 지금까지 기록된 것 중 가장 큰 값을 가져옴 (역행 방지)
+  const maxProgEntry = findMaxProgressForCode(e.fnCode);
+  progress.value = maxProgEntry ? (maxProgEntry.progress || 0) : (latest ? (latest.progress || 0) : 0);
   updateDetailPreview();
   title.focus();
 }
 
 // Enter 키로 빠르게 추가 (제목 입력창 한정, 상세내용은 Enter로 줄바꿈)
+// 한글 입력(IME) 중에 조합을 확정하려고 누른 Enter까지 제출로 오작동하지 않도록 isComposing 체크
 [title].forEach(el=>{
   el.addEventListener('keydown', (ev)=>{
-    if(ev.key === 'Enter' && !ev.shiftKey){
+    if(ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229){
       ev.preventDefault();
       $('addBtn').click();
     }
@@ -1572,7 +1602,6 @@ $('clearAllBtn').addEventListener('click', async ()=>{
   if(editingId){ editingId = null; updateFormModeUI(); fullFormReset(); }
   await saveEntries();
   render();
-  populateTtDates();
   renderTimetable();
 });
 
@@ -1838,8 +1867,6 @@ function addDays(d, n){ const nd = new Date(d); nd.setDate(nd.getDate()+n); retu
 let ttWeekStart = getMonday(new Date());
 
 // 더 이상 사용하지 않지만 다른 곳에서의 호출과의 호환을 위해 남겨둠
-function populateTtDates(){}
-
 // 같은 시간대에 겹치는 업무들을 옆으로 나란히 배치하기 위한 레이아웃 계산
 function layoutDayEntries(dayEntries){
   const items = dayEntries
@@ -1940,7 +1967,7 @@ function renderTimetable(){
       block.style.left = `calc(${leftPct}% + 3px)`;
       block.style.right = 'auto';
       block.style.width = `calc(${widthPct}% - 6px)`;
-      block.innerHTML = `<span class="tt-code">${e.fnCode||'-'}</span><span class="tt-title">${e.title||''}</span>`;
+      block.innerHTML = `<span class="tt-code">${escapeHtml(e.fnCode)||'-'}</span><span class="tt-title">${escapeHtml(e.title)}</span>`;
       attachBlockDrag(block, e);
 
       const delX = document.createElement('span');
@@ -2201,7 +2228,7 @@ $('logTodayBtn').addEventListener('click', ()=> changeWeek(0));
 function showDialog(message, {okText = "확인", cancelText = "취소", showCancel = true} = {}){
   return new Promise(resolve=>{
     modalBody.innerHTML = `
-      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${String(message).replace(/</g,'&lt;')}</div>
+      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${escapeHtml(message)}</div>
       <div class="actions-row" style="margin-top:18px">
         ${showCancel ? `<button class="btn btn-ghost" id="dlgCancelBtn" type="button">${cancelText}</button>` : ''}
         <button class="btn btn-primary" id="dlgOkBtn" type="button">${okText}</button>
@@ -2301,7 +2328,7 @@ setInterval(checkForUpdate, 5*60*1000); // 5분마다 확인
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkForUpdate(); });
 
 // 초기화
-$('f_date').value = new Date().toISOString().slice(0,10);
+$('f_date').value = toISO(new Date());
 $('f_enddate').value = $('f_date').value;
 lastAutoEnddate = $('f_date').value;
 updateDetailPreview();
