@@ -2,9 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-01">
+<meta name="app-version" content="2026-08-27-06">
 <title>업무일지 입력 프로그램</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
   :root{
     --navy:#1b2a4a;
@@ -103,6 +103,17 @@
   .chip:hover{filter:brightness(0.96)}
   .chip .chip-code{font-family:var(--mono);font-weight:700;color:var(--navy);font-size:10.5px}
   .chip .chip-title{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+
+  .preset-group-label{font-size:10.5px;color:var(--ink-2);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px}
+  .preset-row{display:flex;flex-wrap:wrap;gap:6px}
+  .preset-row .preset-btn{
+    display:inline-flex;align-items:center;justify-content:center;flex-direction:row;
+    background:#fff;border:1px solid var(--line);border-radius:7px;color:var(--ink-2);
+    padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .1s;white-space:nowrap;max-width:none;
+  }
+  .preset-row .preset-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
+  .preset-row-duration .preset-btn{min-width:46px;padding:6px 8px;font-family:var(--mono)}
+
   input[readonly]{background:#f1f3f9;color:var(--ink-2)}
   textarea{resize:vertical;min-height:54px}
 
@@ -205,7 +216,7 @@
   .tt-del-x{
     position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;
     background:#c0392b;color:#fff;font-size:15px;line-height:22px;text-align:center;
-    cursor:pointer;opacity:0.22;transition:opacity .12s;z-index:5;font-weight:700;
+    cursor:pointer;opacity:0;transition:opacity .12s;z-index:5;font-weight:700;
     box-shadow:0 2px 6px rgba(0,0,0,.25);touch-action:none;
   }
   .tt-block:hover .tt-del-x{opacity:1}
@@ -270,20 +281,40 @@
     <div class="section collapsed" data-section="1">
       <div class="section-title"><span class="num">1</span>언제 (날짜 · 시간)<span class="section-caret">▾</span></div>
       <div class="section-body grid">
-        <div>
+        <div class="span4">
           <label>날짜</label>
-          <input type="date" id="f_date">
+          <input type="date" id="f_date" style="max-width:200px">
         </div>
-        <div class="span3" id="timePresets" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:2px"></div>
 
-        <div>
-          <label>시작 시간 (24시간제)</label>
-          <select id="f_start"></select>
+        <div class="span4">
+          <div class="preset-group-label">빠른 시간대</div>
+          <div id="timePresets" class="preset-row"></div>
+        </div>
+
+        <div class="span4">
+          <div class="preset-group-label">소요 시간 (몇 시간 했나요)</div>
+          <div id="durationPresets" class="preset-row preset-row-duration"></div>
+        </div>
+
+        <div class="span2">
+          <label>시작 시간</label>
+          <div style="display:flex;gap:6px">
+            <select id="f_start_hour" style="flex:1"></select>
+            <select id="f_start_min" style="flex:1"></select>
+          </div>
         </div>
         <div>
-          <label>종료 시간 (24시간제)</label>
-          <select id="f_end"></select>
+          <label>소요 시간</label>
+          <input type="number" id="f_duration" step="0.5" min="0.5" value="1">
         </div>
+        <div>
+          <label>종료 시간 (자동계산)</label>
+          <input type="text" id="f_end_display" readonly value="">
+        </div>
+
+        <input type="hidden" id="f_start">
+        <input type="hidden" id="f_end">
+
         <div>
           <label>금주 시간 (자동계산)</label>
           <input type="text" id="f_wtime" readonly value="0">
@@ -433,6 +464,12 @@
     <div class="toolbar">
       <h2 style="margin:0">누적된 업무일지</h2>
       <div class="count" id="rowCount">0건</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-ghost" id="logPrevWeekBtn" type="button">◀ 이전 주</button>
+      <span id="logWeekLabel" style="font-size:12.5px;color:var(--ink-2);font-weight:600;min-width:170px;text-align:center"></span>
+      <button class="btn btn-ghost" id="logNextWeekBtn" type="button">다음 주 ▶</button>
+      <button class="btn btn-ghost" id="logTodayBtn" type="button">이번 주</button>
     </div>
     <div style="overflow-x:auto">
       <table>
@@ -590,55 +627,110 @@ const ttGrid = $('tt_grid'), ttWeekLabel = $('tt_week_label');
 const ttPrevBtn = $('tt_prev'), ttNextBtn = $('tt_next'), ttTodayBtn = $('tt_today');
 const modalBackdrop = $('modalBackdrop'), modalBody = $('modalBody');
 
-// 시작/종료 시간 셀렉트 채우기 (24시간제, 30분 단위) - 주요 업무시간(08:30~17:30)을 별도 그룹으로 강조
+// 시작 시간: 시(hour) / 분(00,30) 두 개의 짧은 목록으로 구성 - 항목이 많은 긴 콤보박스 대신 가독성 위주로
 const CORE_START_MIN = 8*60+30, CORE_END_MIN = 17*60+30;
 const LUNCH_START_MIN = 11*60+30, LUNCH_END_MIN = 12*60+30;
-function fillTimeSelect(sel, defaultVal){
-  const coreGroup = document.createElement('optgroup');
-  coreGroup.label = "★ 주요 업무시간 (08:30~17:30)";
-  const otherGroup = document.createElement('optgroup');
-  otherGroup.label = "그 외 (조기출근/야근 등)";
 
+function fillStartTimeSelects(defaultH, defaultM){
+  const hourSel = $('f_start_hour'), minSel = $('f_start_min');
+  hourSel.innerHTML = ""; minSel.innerHTML = "";
   for(let h=7; h<=22; h++){
-    for(let m=0; m<60; m+=30){
-      if(h === 22 && m === 30) continue; // 22:00 이 마지막
-      const v = pad(h)+":"+pad(m);
-      const o = document.createElement('option');
-      o.value = v; o.textContent = v;
-      if(v === defaultVal) o.selected = true;
-      const mins = h*60+m;
-      const isCore = mins >= CORE_START_MIN && mins <= CORE_END_MIN;
-      (isCore ? coreGroup : otherGroup).appendChild(o);
-    }
+    const o = document.createElement('option');
+    o.value = pad(h); o.textContent = pad(h)+"시";
+    if(pad(h) === defaultH) o.selected = true;
+    hourSel.appendChild(o);
   }
-  sel.appendChild(coreGroup);
-  sel.appendChild(otherGroup);
+  ["00","30"].forEach(m=>{
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m+"분";
+    if(m === defaultM) o.selected = true;
+    minSel.appendChild(o);
+  });
 }
-fillTimeSelect(startEl, "09:00");
-fillTimeSelect(endEl, "10:00");
+fillStartTimeSelects("09", "00");
 
-// 자주 쓰는 시간대 - 원클릭으로 시작/종료 시간 채우기
+function applyStartAndDuration(){
+  const sh = $('f_start_hour').value, sm = $('f_start_min').value;
+  if(!sh || !sm) return;
+  const startStr = sh+":"+sm;
+  let durHours = parseFloat($('f_duration').value);
+  if(!durHours || durHours < 0.5) durHours = 0.5;
+  const startMin = toMinutes(startStr);
+  let endMin = startMin + Math.round(durHours*60);
+  if(endMin > TT_END_HOUR*60){
+    endMin = TT_END_HOUR*60;
+    durHours = Math.max(0.5, (endMin - startMin)/60);
+    endMin = startMin + Math.round(durHours*60);
+    $('f_duration').value = durHours;
+    status.textContent = "근무 가능 시간(22:00)을 넘어서 종료 시간이 22:00으로 제한되었습니다.";
+    setTimeout(()=>status.textContent="", 3000);
+  }
+  const endStr = pad(Math.floor(endMin/60))+":"+pad(endMin%60);
+  startEl.value = startStr;
+  endEl.value = endStr;
+  $('f_end_display').value = endStr;
+  wtime.value = durHours;
+  wratio.value = autoRatio(durHours);
+  $('f_start_hour').classList.remove('input-error');
+  updateDetailPreview();
+}
+['change'].forEach(evt=>{
+  $('f_start_hour').addEventListener(evt, applyStartAndDuration);
+  $('f_start_min').addEventListener(evt, applyStartAndDuration);
+});
+$('f_duration').addEventListener('input', applyStartAndDuration);
+
+// 다른 곳(수정 불러오기, 시간표 드래그 등)에서 시작~종료 범위를 그대로 폼에 반영할 때 쓰는 함수
+function setFormTimeFromRange(startStr, endStr){
+  const [sh, sm] = startStr.split(':');
+  $('f_start_hour').value = sh;
+  $('f_start_min').value = sm;
+  startEl.value = startStr;
+  endEl.value = endStr;
+  $('f_end_display').value = endStr;
+  const durHours = Math.max(0.5, Math.round(((toMinutes(endStr) - toMinutes(startStr))/60)*4)/4);
+  $('f_duration').value = durHours;
+  wtime.value = durHours;
+  wratio.value = autoRatio(durHours);
+  updateDetailPreview();
+}
+
+// 자주 쓰는 시간대 - 원클릭으로 시작시간+소요시간 채우기
 const TIME_PRESETS = [
-  {label:"오전 08:30~11:30", s:"08:30", e:"11:30"},
-  {label:"오후 12:30~15:00", s:"12:30", e:"15:00"},
-  {label:"오후 15:00~17:30", s:"15:00", e:"17:30"},
-  {label:"조기출근 07~08:30", s:"07:00", e:"08:30"},
-  {label:"야근 17:30~18:00", s:"17:30", e:"18:00"},
-  {label:"야근 1시간 (17:30~18:30)", s:"17:30", e:"18:30"},
-  {label:"야근 2시간 (17:30~19:30)", s:"17:30", e:"19:30"},
-  {label:"야근 3시간 (17:30~20:30)", s:"17:30", e:"20:30"},
+  {label:"오전", s:"08:30", e:"11:30"},
+  {label:"오후1", s:"12:30", e:"15:00"},
+  {label:"오후2", s:"15:00", e:"17:30"},
+  {label:"조기출근", s:"07:00", e:"08:30"},
+  {label:"야근 1h", s:"17:30", e:"18:30"},
+  {label:"야근 2h", s:"17:30", e:"19:30"},
+  {label:"야근 3h", s:"17:30", e:"20:30"},
 ];
 (function renderTimePresets(){
   const wrap = $('timePresets');
   TIME_PRESETS.forEach(p=>{
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'chip';
-    btn.style.padding = '5px 10px';
+    btn.className = 'preset-btn';
     btn.textContent = p.label;
+    btn.title = `${p.s} ~ ${p.e}`;
+    btn.addEventListener('click', ()=> setFormTimeFromRange(p.s, p.e));
+    wrap.appendChild(btn);
+  });
+})();
+
+// 소요 시간(몇 시간 했는지) 프리셋
+const DURATION_PRESETS = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
+(function renderDurationPresets(){
+  const wrap = $('durationPresets');
+  DURATION_PRESETS.forEach(h=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'preset-btn';
+    btn.textContent = h + "h";
+    btn.title = h + "시간";
     btn.addEventListener('click', ()=>{
-      startEl.value = p.s; endEl.value = p.e;
-      updateWorkedTime();
+      $('f_duration').value = h;
+      applyStartAndDuration();
     });
     wrap.appendChild(btn);
   });
@@ -943,21 +1035,8 @@ function toMinutes(hhmm){
   return h*60+m;
 }
 
-function updateWorkedTime(){
-  const s = toMinutes(startEl.value);
-  const e = toMinutes(endEl.value);
-  if(s===null || e===null || e<=s){
-    wtime.value = "0";
-    wratio.value = 0;
-    timeStatus.textContent = (s!==null && e!==null && e<=s) ? "종료 시간이 시작 시간보다 늦어야 합니다." : "";
-    return;
-  }
-  const hours = Math.round(((e - s)/60) * 4) / 4; // 15분 단위 반올림
-  wtime.value = hours;
-  wratio.value = autoRatio(hours);
-  timeStatus.textContent = "";
-}
-[startEl,endEl].forEach(el=>el.addEventListener('input', updateWorkedTime));
+// (updateWorkedTime는 applyStartAndDuration으로 대체되어 제거됨)
+// (참고) 시작/종료 시간은 이제 시(hour)/분(min)+소요시간 UI에서 applyStartAndDuration()으로 동기화됨
 ntime.addEventListener('input', ()=>{ nratio.value = autoRatio(ntime.value); });
 
 // ---------- 저장/불러오기 ----------
@@ -979,10 +1058,24 @@ async function saveEntries(){
 
 function render(){
   rowsBody.innerHTML = "";
-  rowCount.textContent = entries.length + "건";
-  emptyMsg.style.display = entries.length ? 'none' : 'block';
   renderQuickChips();
-  entries.slice().reverse().forEach(e=>{
+
+  const weekStartISO = toISO(ttWeekStart);
+  const weekEndISO = toISO(addDays(ttWeekStart, 6));
+  $('logWeekLabel').textContent = `${weekStartISO} ~ ${weekEndISO}`;
+
+  const visible = entries
+    .filter(e => e.date >= weekStartISO && e.date <= weekEndISO)
+    .slice()
+    .sort((a,b)=> (a.date+"|"+ (a.start||"")).localeCompare(b.date+"|"+(b.start||"")));
+
+  rowCount.textContent = `${visible.length}건 (전체 ${entries.length}건)`;
+  emptyMsg.style.display = visible.length ? 'none' : 'block';
+  emptyMsg.textContent = entries.length
+    ? "이번 주에 입력된 업무가 없습니다. '이전 주 / 다음 주'로 다른 주를 확인해보세요."
+    : "아직 입력된 업무가 없습니다. 위에서 오늘 업무를 추가해보세요.";
+
+  visible.forEach(e=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${e.gubun||''}</td>
@@ -1039,8 +1132,8 @@ const REQUIRED_FIELDS = [
   { el: title, label: '수행 업무(제목)', check: el => !!el.value.trim() },
   { el: enddate, label: '(1) 마감기한', check: el => !!el.value },
   { el: memo, label: '(3) 상세내용', check: el => !!el.value.trim() },
-  { el: startEl, label: '시작 시간', check: el => !!el.value },
-  { el: endEl, label: '종료 시간', check: el => !!el.value },
+  { el: $('f_start_hour'), label: '시작 시간', check: () => !!startEl.value },
+  { el: $('f_duration'), label: '소요 시간', check: el => !!el.value && parseFloat(el.value) > 0 },
 ];
 REQUIRED_FIELDS.forEach(f=>{
   const evt = (f.el.tagName === 'SELECT') ? 'change' : 'input';
@@ -1058,13 +1151,6 @@ function validateForm(){
       if(sec) sec.classList.remove('collapsed');
     }
   });
-  if(startEl.value && endEl.value && toMinutes(endEl.value) <= toMinutes(startEl.value)){
-    startEl.classList.add('input-error');
-    endEl.classList.add('input-error');
-    missing.push('종료 시간 (시작 시간보다 늦어야 함)');
-    const sec = startEl.closest('.section');
-    if(sec) sec.classList.remove('collapsed');
-  }
   return missing;
 }
 
@@ -1121,9 +1207,13 @@ $('addBtn').addEventListener('click', async ()=>{
   if(!wasEditing){
     const prevEnd = endEl.value;
     fullFormReset();
-    startEl.value = prevEnd;
-    endEl.value = "";
-    updateWorkedTime();
+    if(prevEnd){
+      const [ph, pm] = prevEnd.split(':');
+      $('f_start_hour').value = ph;
+      $('f_start_min').value = pm;
+      $('f_duration').value = 1;
+      applyStartAndDuration();
+    }
   }
 });
 
@@ -1135,9 +1225,7 @@ function loadEntryToForm(e){
   expandAllSections();
   REQUIRED_FIELDS.forEach(f=>f.el.classList.remove('input-error'));
   $('f_date').value = e.date;
-  startEl.value = e.start || startEl.value;
-  endEl.value = e.end || endEl.value;
-  updateWorkedTime();
+  if(e.start && e.end) setFormTimeFromRange(e.start, e.end);
 
   const m = MASTER.find(m => m.fnCode === e.fnCode);
   if(m){
@@ -1351,6 +1439,7 @@ function softReset(){
   progress.value = 0;
   enddate.value = $('f_date').value;
   lastAutoEnddate = $('f_date').value;
+  $('f_duration').value = 1;
   updateDetailPreview();
   REQUIRED_FIELDS.forEach(f=>f.el.classList.remove('input-error'));
 }
@@ -1444,6 +1533,8 @@ $('exportBtn').addEventListener('click', ()=>{
     if(!target.length){ status.textContent = "선택한 기간에 해당하는 업무일지가 없습니다."; return; }
   }
 
+  target = target.slice().sort((a,b)=> (a.date+"|"+(a.start||"")).localeCompare(b.date+"|"+(b.start||"")));
+
   const header = ["구분","Project Code","Function Code","Code Description","Date","수행 업무(제목)","수행 업무(상세)","금주 시간","금주 비중","차주 시간","차주 비중","시작 시간","종료 시간"];
   const rows = target.map(e=>[
     e.gubun, e.pcode, e.fnCode, e.codeDesc, e.date, e.title, e.detail,
@@ -1458,11 +1549,26 @@ $('exportBtn').addEventListener('click', ()=>{
       if(cell) cell.z = '0%';
     });
   }
+  // A~H (복사해서 쓰시는 부분) 헤더에 열마다 다른 색을 입혀서 구분하기 쉽도록 함
+  const HEADER_COLORS = ["FFD8E4FF","FFD8F0E4","FFFFE9C7","FFFCE0E0","FFE7DBFA","FFD6F3F7","FFFFE6F2","FFEAF0D8"];
+  ["A","B","C","D","E","F","G","H"].forEach((col, i)=>{
+    const cell = ws[col+"1"];
+    if(cell){
+      cell.s = {
+        fill: { patternType: "solid", fgColor: { rgb: HEADER_COLORS[i] } },
+        font: { bold: true },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true }
+      };
+    }
+  });
+  ws['!autofilter'] = { ref: `A1:M${rows.length+1}` };
+  ws['!rows'] = [{ hpt: 26 }]; // 헤더 행 높이
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "업무일지");
   const today = new Date();
   const fname = `업무일지_${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}${fnameSuffix}.xlsx`;
-  XLSX.writeFile(wb, fname);
+  XLSX.writeFile(wb, fname, { cellStyles: true });
 });
 
 // ---------- 엑셀 가져오기 (이전에 내보낸 파일을 되돌려 입력) ----------
@@ -1806,7 +1912,7 @@ function attachDragSelect(track, dayISO){
       syncEnddateFromDate();
       startEl.value = toHHMM(startMin);
       endEl.value = toHHMM(endMin);
-      updateWorkedTime();
+      setFormTimeFromRange(toHHMM(startMin), toHHMM(endMin));
       status.textContent = `${dayISO} ${toHHMM(startMin)}~${toHHMM(endMin)} 시간이 입력창에 반영되었습니다. 나머지 내용을 채워주세요.`;
       setTimeout(()=>status.textContent="", 3000);
       scrollToForm();
@@ -1969,9 +2075,18 @@ function attachResizeHandle(block, entry, edge){
   block.appendChild(handle);
 }
 
-ttPrevBtn.addEventListener('click', ()=>{ ttWeekStart = addDays(ttWeekStart, -7); renderTimetable(); });
-ttNextBtn.addEventListener('click', ()=>{ ttWeekStart = addDays(ttWeekStart, 7); renderTimetable(); });
-ttTodayBtn.addEventListener('click', ()=>{ ttWeekStart = getMonday(new Date()); renderTimetable(); });
+function changeWeek(offsetDays){
+  ttWeekStart = offsetDays === 0 ? getMonday(new Date()) : addDays(ttWeekStart, offsetDays);
+  renderTimetable();
+  render();
+}
+ttPrevBtn.addEventListener('click', ()=> changeWeek(-7));
+ttNextBtn.addEventListener('click', ()=> changeWeek(7));
+ttTodayBtn.addEventListener('click', ()=> changeWeek(0));
+
+$('logPrevWeekBtn').addEventListener('click', ()=> changeWeek(-7));
+$('logNextWeekBtn').addEventListener('click', ()=> changeWeek(7));
+$('logTodayBtn').addEventListener('click', ()=> changeWeek(0));
 
 // 네이티브 alert()/confirm()은 일부 미리보기 환경(샌드박스 iframe)에서 막힐 수 있어
 // 화면 내 모달로 직접 확인/알림창을 구현
@@ -1994,9 +2109,10 @@ $('modalClose').addEventListener('click', ()=>modalBackdrop.classList.remove('sh
 modalBackdrop.addEventListener('click', (ev)=>{ if(ev.target===modalBackdrop) modalBackdrop.classList.remove('show'); });
 
 // 입력 흐름을 따라 다음 항목으로 자동 포커스 이동 (① 언제 → ② PJT구분 → ③ 업무선택)
-$('f_date').addEventListener('change', ()=> startEl.focus());
-startEl.addEventListener('change', ()=> endEl.focus());
-endEl.addEventListener('change', ()=> gubun.focus());
+$('f_date').addEventListener('change', ()=> $('f_start_hour').focus());
+$('f_start_hour').addEventListener('change', ()=> $('f_start_min').focus());
+$('f_start_min').addEventListener('change', ()=> $('f_duration').focus());
+$('f_duration').addEventListener('change', ()=> gubun.focus());
 gubun.addEventListener('change', ()=> pcode.focus());
 pcode.addEventListener('change', ()=>{ syncGubunFromProject(); taskSel.focus(); });
 enddate.addEventListener('change', ()=> progress.focus());
@@ -2081,7 +2197,7 @@ $('f_date').value = new Date().toISOString().slice(0,10);
 $('f_enddate').value = $('f_date').value;
 lastAutoEnddate = $('f_date').value;
 updateDetailPreview();
-updateWorkedTime();
+applyStartAndDuration();
 loadProjects();
 loadPinned();
 loadEntries();
