@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-08">
+<meta name="app-version" content="2026-08-27-12">
 <title>업무일지 입력 프로그램</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
@@ -590,28 +590,14 @@ const MASTER = [
 // ---------- 엘리먼트 ----------
 const $ = id => document.getElementById(id);
 
-// ---------- 저장소 래퍼: window.storage(클라우드) + localStorage(브라우저 로컬)를 함께 사용 ----------
-// Claude 아티팩트 미리보기가 아닌, 다운로드한 파일을 직접 브라우저에서 열었을 때는
-// window.storage가 아예 없을 수 있어서, 이 경우에도 데이터가 남도록 localStorage를 항상 병행 저장한다.
+// ---------- 저장소 래퍼: 브라우저 localStorage만 사용 ----------
+// (예전엔 Claude 미리보기용 window.storage도 함께 썼는데, 실제 배포된 사이트에서
+//  그 값이 우선시되면서 방금 저장한 최신 값을 오래된 값으로 덮어써버리는 문제가 있어 제거함)
 async function persistGet(key){
-  let localVal = null;
-  try{ localVal = localStorage.getItem(key); }catch(e){}
-  let cloudVal = null;
-  if(window.storage && window.storage.get){
-    try{
-      const res = await window.storage.get(key, false);
-      cloudVal = res ? res.value : null;
-    }catch(e){}
-  }
-  return cloudVal !== null && cloudVal !== undefined ? cloudVal : localVal;
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
 }
 async function persistSet(key, value){
-  let ok = false;
-  try{ localStorage.setItem(key, value); ok = true; }catch(e){}
-  if(window.storage && window.storage.set){
-    try{ await window.storage.set(key, value, false); ok = true; }catch(e){}
-  }
-  return ok;
+  try{ localStorage.setItem(key, value); return true; }catch(e){ return false; }
 }
 
 const taskSel = $('f_task'), codeField = $('f_code'), fcPreview = $('fc_preview');
@@ -763,12 +749,34 @@ const DURATION_PRESETS = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
 
 // ---------- Project Code 목록 (기본 4개 + 사용자 추가분, 전부 수정/삭제 가능, 브라우저에 저장) ----------
 const DEFAULT_PROJECTS = [
-  {code:"210025", name:"BALTIC", gubun:"수행(KPI)"},
-  {code:"260120", name:"AM4", gubun:"수행(KPI)"},
-  {code:"250177", name:"LCM", gubun:"수행(KPI)"},
-  {code:"000000", name:"GENERAL", gubun:"기타(KPI)"}
+  {code:"210025", name:"BALTIC", gubun:"수행(KPI)", archived:false},
+  {code:"260120", name:"AM4", gubun:"수행(KPI)", archived:false},
+  {code:"250177", name:"LCM", gubun:"수행(KPI)", archived:false},
+  {code:"000000", name:"GENERAL", gubun:"기타(KPI)", archived:false}
 ];
 let projects = [];
+
+// Function/Project Code를 폼에 반영할 때 공용으로 쓰는 로직:
+// - 완전히 모르는 코드(다른 기기/가져오기 등) → 자동으로 목록에 등록
+// - 보관된 코드 → 목록엔 그대로 숨겨두고, 지금 선택만 임시로 보이게 함 (자동 복원하지 않음)
+async function ensurePcodeSelectable(code, fallbackGubun){
+  if(!code) return;
+  const existing = projects.find(p=>p.code === code);
+  if(existing){
+    if(existing.archived && !pcode.querySelector(`option[value="${CSS.escape(code)}"]`)){
+      const o = document.createElement('option');
+      o.value = existing.code;
+      o.textContent = `${existing.code}${existing.name ? ' '+existing.name : ''} (보관됨)`;
+      pcode.appendChild(o);
+    }
+  } else {
+    projects.push({ code, name: '', gubun: fallbackGubun || '수행(KPI)', archived: false });
+    await saveProjects();
+    populateProjectSelect(code);
+    status.textContent = `Project Code "${code}"가 목록에 없어 자동으로 등록했습니다. 필요하면 이름을 채워주세요.`;
+    setTimeout(()=>status.textContent="", 4000);
+  }
+}
 
 function populateProjectSelect(keepValue){
   const prevVal = keepValue !== undefined ? keepValue : pcode.value;
@@ -776,13 +784,27 @@ function populateProjectSelect(keepValue){
   const blank = document.createElement('option');
   blank.value = ""; blank.textContent = "선택하세요";
   pcode.appendChild(blank);
-  projects.forEach(p=>{
+  projects.filter(p=>!p.archived).forEach(p=>{
     const o = document.createElement('option');
     o.value = p.code;
     o.textContent = p.name ? `${p.code} ${p.name}` : p.code;
     pcode.appendChild(o);
   });
-  if(projects.some(p=>p.code === prevVal)) pcode.value = prevVal;
+  const activeMatch = projects.find(p=>p.code === prevVal && !p.archived);
+  const archivedMatch = projects.find(p=>p.code === prevVal && p.archived);
+  if(activeMatch){
+    pcode.value = prevVal;
+  } else if(archivedMatch){
+    // 보관된 코드가 폼에 이미 선택돼 있던 경우 - 목록에서 숨기되 지금 선택은 그대로 보이도록 임시 옵션 추가
+    const o = document.createElement('option');
+    o.value = archivedMatch.code;
+    o.textContent = `${archivedMatch.code}${archivedMatch.name ? ' '+archivedMatch.name : ''} (보관됨)`;
+    pcode.appendChild(o);
+    pcode.value = prevVal;
+  } else if(prevVal){
+    status.textContent = `방금 삭제된 Project Code(${prevVal})가 입력창에 선택돼 있었습니다. 다시 선택해주세요.`;
+    setTimeout(()=>status.textContent="", 4000);
+  }
   syncGubunFromProject();
 }
 
@@ -797,7 +819,7 @@ async function loadProjects(){
     const raw = await persistGet('worklog_projects');
     if(raw){
       projects = JSON.parse(raw);
-      // 이전 버전 데이터 마이그레이션: 구분 값이 없으면 기본값 채움
+      // 이전 버전 데이터 마이그레이션: 구분/보관 값이 없으면 기본값 채움
       let migrated = false;
       projects.forEach(p=>{
         if(!p.gubun){
@@ -805,6 +827,7 @@ async function loadProjects(){
           p.gubun = def ? def.gubun : "수행(KPI)";
           migrated = true;
         }
+        if(p.archived === undefined){ p.archived = false; migrated = true; }
       });
       if(migrated) await saveProjects();
     } else {
@@ -830,13 +853,14 @@ function renderProjManageList(){
   }
   projects.forEach((p, i)=>{
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px' + (p.archived ? ';opacity:0.55' : '');
     const gubunOptionsHtml = GUBUN_OPTIONS.map(g=>`<option value="${g}" ${g===p.gubun?'selected':''}>${g}</option>`).join('');
     row.innerHTML = `
       <input type="text" value="${p.code.replace(/"/g,'&quot;')}" data-idx="${i}" data-field="code" style="flex:1;font-family:var(--mono);font-size:12.5px;padding:6px 8px">
       <input type="text" value="${(p.name||'').replace(/"/g,'&quot;')}" data-idx="${i}" data-field="name" placeholder="프로젝트명" style="flex:1;font-size:12.5px;padding:6px 8px">
       <select data-idx="${i}" data-field="gubun" style="flex:1;font-size:12.5px;padding:6px 8px">${gubunOptionsHtml}</select>
-      <button type="button" class="btn-danger" data-idx="${i}" title="삭제" style="padding:4px 8px;font-size:12px;flex:none">✕</button>
+      <button type="button" class="btn-danger" data-idx="${i}" data-act="archive" title="${p.archived ? '복원' : '보관 (완료된 프로젝트, 목록에서만 숨김)'}" style="padding:4px 8px;font-size:12px;flex:none;white-space:nowrap">${p.archived ? '복원' : '보관'}</button>
+      <button type="button" class="btn-danger" data-idx="${i}" data-act="delete" title="완전 삭제" style="padding:4px 8px;font-size:12px;flex:none">✕</button>
     `;
     wrap.appendChild(row);
   });
@@ -872,12 +896,23 @@ function renderProjManageList(){
   wrap.querySelectorAll('button[data-idx]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const idx = parseInt(btn.dataset.idx);
-      const removed = projects[idx];
-      if(!(await showDialog(`"${removed.code}${removed.name ? ' '+removed.name : ''}" 을 삭제할까요?`, {okText:'삭제'}))) return;
-      projects.splice(idx, 1);
-      await saveProjects();
-      populateProjectSelect();
-      renderProjManageList();
+      const target = projects[idx];
+      if(btn.dataset.act === 'archive'){
+        target.archived = !target.archived;
+        await saveProjects();
+        populateProjectSelect();
+        renderProjManageList();
+        status.textContent = target.archived
+          ? `"${target.code}"를 보관했습니다. 목록에서는 숨겨지고, 기존 업무일지는 그대로 유지됩니다.`
+          : `"${target.code}"를 복원했습니다.`;
+        setTimeout(()=>status.textContent="", 3000);
+      } else {
+        if(!(await showDialog(`"${target.code}${target.name ? ' '+target.name : ''}" 을 완전히 삭제할까요? 프로젝트가 끝나서 더 안 쓰신다면 "보관"을 추천드려요 (완전 삭제는 되돌릴 수 없습니다).`, {okText:'완전 삭제'}))) return;
+        projects.splice(idx, 1);
+        await saveProjects();
+        populateProjectSelect();
+        renderProjManageList();
+      }
     });
   });
 }
@@ -899,7 +934,7 @@ $('saveProjBtn').addEventListener('click', async ()=>{
   if(!code){ showDialog("Project Code를 입력해주세요.", {showCancel:false}); $('newProjCode').classList.add('input-error'); return; }
   if(projects.some(p=>p.code === code)){ showDialog("이미 존재하는 Project Code 입니다.", {showCancel:false}); return; }
   $('newProjCode').classList.remove('input-error');
-  projects.push({code, name, gubun:newGubun});
+  projects.push({code, name, gubun:newGubun, archived:false});
   await saveProjects();
   populateProjectSelect(code);
   renderProjManageList();
@@ -1063,6 +1098,12 @@ function toMinutes(hhmm){
 // (updateWorkedTime는 applyStartAndDuration으로 대체되어 제거됨)
 // (참고) 시작/종료 시간은 이제 시(hour)/분(min)+소요시간 UI에서 applyStartAndDuration()으로 동기화됨
 ntime.addEventListener('input', ()=>{ nratio.value = autoRatio(ntime.value); });
+ntime.addEventListener('blur', ()=>{ if(parseFloat(ntime.value) < 0) ntime.value = 0; });
+progress.addEventListener('blur', ()=>{
+  let v = parseFloat(progress.value);
+  if(isNaN(v)) v = 0;
+  progress.value = Math.max(0, Math.min(100, v));
+});
 
 // ---------- 저장/불러오기 ----------
 let entries = [];
@@ -1211,11 +1252,30 @@ $('addBtn').addEventListener('click', async ()=>{
   if(editingId){
     const idx = entries.findIndex(e=>e.id === editingId);
     if(idx > -1){
-      const merged = { ...entries[idx], ...base };
-      entries.splice(idx, 1);
-      entries.push(merged); // 수정된 항목은 배열 맨 뒤로 옮겨서 "가장 최근"이 항상 배열 순서와 일치하도록 함
+      if(fullDaySplit){
+        // "종일"로 수정: 기존 항목을 첫 세그먼트로 갱신하고, 나머지 세그먼트는 새 항목으로 추가
+        const segHours0 = Math.round(((toMinutes(fullDaySplit[0].e) - toMinutes(fullDaySplit[0].s))/60)*4)/4;
+        const merged = { ...entries[idx], ...base, start: fullDaySplit[0].s, end: fullDaySplit[0].e, wtime: segHours0, wratio: autoRatio(segHours0) };
+        entries.splice(idx, 1);
+        entries.push(merged);
+        fullDaySplit.slice(1).forEach((seg, i)=>{
+          const segHours = Math.round(((toMinutes(seg.e) - toMinutes(seg.s))/60)*4)/4;
+          entries.push({
+            id: Date.now()+"_"+i+"_"+Math.random().toString(36).slice(2,7),
+            ...base,
+            start: seg.s, end: seg.e,
+            wtime: segHours, wratio: autoRatio(segHours),
+            updatedAt: Date.now()
+          });
+        });
+        status.textContent = `종일로 수정되어 ${fullDaySplit.length}건(오전/오후)으로 저장되었습니다.`;
+      } else {
+        const merged = { ...entries[idx], ...base };
+        entries.splice(idx, 1);
+        entries.push(merged); // 수정된 항목은 배열 맨 뒤로 옮겨서 "가장 최근"이 항상 배열 순서와 일치하도록 함
+        status.textContent = "수정 내용이 저장되었습니다.";
+      }
     }
-    status.textContent = "수정 내용이 저장되었습니다.";
   } else if(fullDaySplit){
     // "종일" 프리셋: 점심시간을 실제로 비워두기 위해 오전/오후 2건으로 나눠 저장
     fullDaySplit.forEach((seg, i)=>{
@@ -1253,6 +1313,8 @@ $('addBtn').addEventListener('click', async ()=>{
       $('f_duration').value = 1;
       applyStartAndDuration();
     }
+  } else {
+    fullFormReset(); // 수정 저장 후에도 폼을 비워서, 그대로 "추가"를 눌러 중복 저장되는 걸 방지
   }
 });
 
@@ -1260,7 +1322,7 @@ function expandAllSections(){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('collapsed'));
 }
 
-function loadEntryToForm(e){
+async function loadEntryToForm(e){
   expandAllSections();
   REQUIRED_FIELDS.forEach(f=>f.el.classList.remove('input-error'));
   $('f_date').value = e.date;
@@ -1278,7 +1340,10 @@ function loadEntryToForm(e){
   }
 
   gubun.value = e.gubun || "수행(KPI)";
+  await ensurePcodeSelectable(e.pcode, e.gubun);
   pcode.value = e.pcode || "";
+  syncGubunFromProject();
+  if(e.gubun) gubun.value = e.gubun; // Project Code 매핑보다 원래 저장된 구분 값을 우선
   title.value = e.title || "";
   lastAutoTitle = e.title || "";
   progress.value = e.progress || 0;
@@ -1412,7 +1477,7 @@ function findLatestEntryForCode(fnCode){
   return null;
 }
 
-function applyQuickChip(e){
+async function applyQuickChip(e){
   if(editingId){ editingId = null; updateFormModeUI(); } // 편집 중이던 다른 항목을 실수로 덮어쓰지 않도록 편집 모드 해제
   const m = MASTER.find(m => m.fnCode === e.fnCode);
   if(m){
@@ -1427,7 +1492,10 @@ function applyQuickChip(e){
   title.value = e.title || "";
   lastAutoTitle = e.title || "";
   if(e.gubun) gubun.value = e.gubun;
-  if(e.pcode) pcode.value = e.pcode;
+  if(e.pcode){
+    await ensurePcodeSelectable(e.pcode, e.gubun);
+    pcode.value = e.pcode;
+  }
 
   // 실제로 저장된 항목 중 이 Function Code의 가장 최신 내용을 다시 조회해서 반영
   // (고정 칩은 진행도/상세내용을 따로 들고 있지 않으므로, 항상 최신 저장분을 새로 찾아온다)
@@ -1487,6 +1555,7 @@ function fullFormReset(){
   taskSel.value = ""; selected = null;
   codeField.value = ""; fcPreview.classList.remove('show');
   gubun.value = ""; pcode.value = "";
+  fullDaySplit = null;
   softReset();
 }
 
@@ -2021,7 +2090,7 @@ function attachBlockDrag(block, entry){
         saveEntries();
         render();
         renderTimetable();
-        if(editingId === entry.id){ editingId = null; updateFormModeUI(); } // 편집 중이던 폼이 낡은 값으로 남아 저장을 덮어쓰지 않도록
+        if(editingId === entry.id){ editingId = null; updateFormModeUI(); fullFormReset(); } // 편집 중이던 폼이 낡은 값으로 남아 중복/덮어쓰기 저장되지 않도록
         status.textContent = `일정이 ${newDate} ${toHHMM(startMin)}~${toHHMM(endMin)}로 이동되었습니다.`;
         setTimeout(()=>status.textContent="", 2500);
       }
@@ -2098,7 +2167,7 @@ function attachResizeHandle(block, entry, edge){
         saveEntries();
         render();
         renderTimetable();
-        if(editingId === entry.id){ editingId = null; updateFormModeUI(); } // 편집 중이던 폼이 낡은 값으로 남아 저장을 덮어쓰지 않도록
+        if(editingId === entry.id){ editingId = null; updateFormModeUI(); fullFormReset(); } // 편집 중이던 폼이 낡은 값으로 남아 중복/덮어쓰기 저장되지 않도록
         status.textContent = `일정 시간이 ${toHHMM(newStartMin)}~${toHHMM(newEndMin)}(${newHours}시간)로 변경되었습니다.`;
         setTimeout(()=>status.textContent="", 2500);
       } else {
