@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-14">
+<meta name="app-version" content="2026-08-27-16">
 <title>업무일지 입력 프로그램</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
@@ -481,6 +481,10 @@
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="emptyMsg">아직 입력된 업무가 없습니다. 위에서 오늘 업무를 추가해보세요.</div>
+    </div>
+
+    <div id="exportReminder" style="display:none;margin-top:14px;padding:10px 14px;background:#fff4e0;border:1px solid #f2d49a;border-radius:8px;color:#8a5a00;font-size:12.5px;line-height:1.6">
+      ⚠ 아직 엑셀로 내보내지 않은 변경사항이 있습니다. 회사 컴퓨터라면 매일 저장 데이터가 초기화될 수 있으니, 자리를 뜨시기 전에 <b>엑셀로 내보내기</b>를 해두세요.
     </div>
 
     <div style="margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fafbfe">
@@ -1130,9 +1134,18 @@ async function loadEntries(){
   render();
   renderTimetable();
 }
+let hasUnexportedChanges = false;
+
+function updateExportReminder(){
+  const banner = $('exportReminder');
+  if(banner) banner.style.display = hasUnexportedChanges ? 'block' : 'none';
+}
+
 async function saveEntries(){
   const ok = await persistSet('worklog_entries', JSON.stringify(entries));
   if(!ok) status.textContent = "저장 중 오류가 발생했습니다. (입력은 화면에 남아있습니다)";
+  hasUnexportedChanges = true;
+  updateExportReminder();
 }
 
 function render(){
@@ -1461,15 +1474,18 @@ $('pinTaskBtn').addEventListener('click', async ()=>{
 
 function renderQuickChips(){
   const wrap = $('quickChips');
-  const seen = new Set(pinnedTasks.map(p => p.fnCode||''));
-  const list = [];
-  for(let i = entries.length - 1; i >= 0 && list.length < 6; i--){
-    const e = entries[i];
-    const key = e.fnCode || ('__notitle_'+i); // Function Code 없는 항목은 dedupe 대상에서 제외
-    if(e.fnCode && seen.has(key)) continue;
-    if(e.fnCode) seen.add(key);
-    list.push(e);
-  }
+  const pinnedCodes = new Set(pinnedTasks.map(p => p.fnCode||''));
+  const seenCodes = new Set();
+  entries.forEach(en=>{
+    if(!en.fnCode || pinnedCodes.has(en.fnCode)) return;
+    seenCodes.add(en.fnCode);
+  });
+  // Function Code별로 "가장 최근에 수행한 날짜"의 항목을 대표로 뽑고, 그 날짜 기준 최신순으로 정렬
+  const list = Array.from(seenCodes)
+    .map(code => findLatestEntryForCode(code))
+    .filter(Boolean)
+    .sort((a,b)=> b.date.localeCompare(a.date))
+    .slice(0, 6);
   wrap.innerHTML = "";
   $('quickChipsWrap').style.display = list.length ? 'block' : 'none';
   list.forEach(e=>{
@@ -1482,12 +1498,17 @@ function renderQuickChips(){
   });
 }
 
+// "최근"의 기준을 저장/수정한 시점이 아니라 실제 업무 날짜(가장 최근에 수행한 날)로 정의
 function findLatestEntryForCode(fnCode){
   if(!fnCode) return null;
-  for(let i = entries.length - 1; i >= 0; i--){
-    if(entries[i].fnCode === fnCode) return entries[i];
-  }
-  return null;
+  let best = null, bestIdx = -1;
+  entries.forEach((en, idx)=>{
+    if(en.fnCode !== fnCode) return;
+    if(!best || en.date > best.date || (en.date === best.date && idx > bestIdx)){
+      best = en; bestIdx = idx;
+    }
+  });
+  return best;
 }
 
 // 진행도는 "가장 최근 저장"이 아니라, 지금까지 기록된 것 중 "가장 큰 %"를 가져온다
@@ -1706,6 +1727,10 @@ $('exportBtn').addEventListener('click', ()=>{
   const today = new Date();
   const fname = `업무일지_${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}${fnameSuffix}.xlsx`;
   XLSX.writeFile(wb, fname, { cellStyles: true });
+  hasUnexportedChanges = false;
+  updateExportReminder();
+  status.textContent = "엑셀로 내보냈습니다.";
+  setTimeout(()=>status.textContent="", 2000);
 });
 
 // ---------- 엑셀 가져오기 (이전에 내보낸 파일을 되돌려 입력) ----------
@@ -2326,6 +2351,14 @@ async function checkForUpdate(){
 }
 setInterval(checkForUpdate, 5*60*1000); // 5분마다 확인
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkForUpdate(); });
+
+// 저장하지 않은(엑셀로 안 내보낸) 변경사항이 있는 채로 창을 닫으려 하면 브라우저 기본 확인창을 띄움
+window.addEventListener('beforeunload', (ev)=>{
+  if(hasUnexportedChanges){
+    ev.preventDefault();
+    ev.returnValue = '';
+  }
+});
 
 // 초기화
 $('f_date').value = toISO(new Date());
