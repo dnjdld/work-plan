@@ -2,9 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="app-version" content="2026-08-27-16">
+<meta name="app-version" content="2026-08-27-22">
 <title>업무일지 입력 프로그램</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   :root{
     --navy:#1b2a4a;
@@ -106,6 +107,10 @@
   .chip .chip-title{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
 
   .preset-group-label{font-size:10.5px;color:var(--ink-2);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px}
+  .stat-card{background:var(--blue-light);border:1px solid #c9d6f8;border-radius:10px;padding:12px 14px}
+  .stat-card .stat-label{font-size:11px;color:var(--navy-2);font-weight:700;margin-bottom:4px}
+  .stat-card .stat-value{font-size:20px;font-weight:800;color:var(--navy)}
+  .stat-card .stat-sub{font-size:10.5px;color:var(--ink-2);margin-top:2px}
   .preset-row{display:flex;flex-wrap:wrap;gap:6px}
   .preset-row .preset-btn{
     display:inline-flex;align-items:center;justify-content:center;flex-direction:row;
@@ -206,6 +211,11 @@
     background:#fff2d6!important;border:1.5px dashed var(--amber)!important;color:#8a5a00!important;
     pointer-events:none;
   }
+  .tt-preview-block{
+    background:repeating-linear-gradient(45deg, rgba(52,97,235,0.16), rgba(52,97,235,0.16) 6px, rgba(52,97,235,0.28) 6px, rgba(52,97,235,0.28) 12px)!important;
+    border:2px dashed var(--blue)!important;color:var(--navy)!important;
+    pointer-events:none;opacity:0.9;z-index:3;
+  }
   .tt-block{
     position:absolute;left:5px;right:5px;border-radius:8px;
     background:var(--blue-light);border:1px solid #b9c9f5;color:var(--navy-2);
@@ -222,6 +232,20 @@
   }
   .tt-block:hover .tt-del-x{opacity:1}
   .tt-del-x:hover{background:#8e2418;transform:translate(-50%,-50%) scale(1.08)}
+
+  .tt-copy-icon{
+    position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:4px;
+    background:var(--blue);color:#fff;font-size:11px;line-height:16px;text-align:center;
+    cursor:pointer;opacity:0;transition:opacity .12s;z-index:5;touch-action:none;
+  }
+  .tt-block:hover .tt-copy-icon{opacity:0.85}
+  .tt-copy-icon:hover{opacity:1!important;background:var(--navy)}
+
+  .paste-mode-banner{
+    position:sticky;top:10px;z-index:40;max-width:1080px;margin:0 auto 10px;
+    padding:10px 16px;background:#e8f0fe;border:1px solid #b9cdf7;border-radius:10px;
+    color:var(--navy-2);font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
 
   .tt-resize-handle{position:absolute;left:6px;right:6px;height:14px;z-index:6;cursor:ns-resize;touch-action:none}
   .tt-resize-handle::after{
@@ -348,9 +372,9 @@
               <input type="text" id="newProjCode" placeholder="Project Code (예: 260200)" style="flex:1">
               <input type="text" id="newProjName" placeholder="프로젝트명 (예: NEW PROJECT)" style="flex:1">
               <select id="newProjGubun" style="flex:1">
-                <option value="수행(KPI)">수행(KPI)</option>
+                <option value="수행 (KPI)">수행 (KPI)</option>
                 <option value="입찰">입찰</option>
-                <option value="기타(KPI)">기타(KPI)</option>
+                <option value="기타 (KPI)">기타 (KPI)</option>
                 <option value="기타">기타</option>
               </select>
             </div>
@@ -377,14 +401,19 @@
           <label>Function Code</label>
           <input type="text" id="f_code" readonly placeholder="선택 시 자동입력">
         </div>
-        <div style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px">
           <button class="btn btn-ghost" id="pinTaskBtn" type="button" style="white-space:nowrap;width:100%">📌 이 업무 고정하기</button>
+          <button class="btn btn-ghost" id="savePlanBtn" type="button" style="white-space:nowrap;width:100%">📅 예정 업무로 저장</button>
         </div>
 
         <div class="span4">
           <div class="fc-preview" id="fc_preview" style="white-space:nowrap;overflow-x:auto"></div>
         </div>
 
+        <div class="span4" id="plansChipsWrap" style="display:none">
+          <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:6px">📅 예정된 업무 (클릭하면 마감기한·진행도·상세내용까지 그대로 불러옵니다)</div>
+          <div id="plansChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+        </div>
         <div class="span4" id="pinnedChipsWrap" style="display:none">
           <div style="font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:6px">📌 장기 진행 업무 (고정)</div>
           <div id="pinnedChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
@@ -460,6 +489,60 @@
 
   <div class="card">
     <div class="toolbar">
+      <h2 style="margin:0">📊 업무 분석</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select id="statsRange" style="width:auto">
+          <option value="4">최근 4주</option>
+          <option value="8" selected>최근 8주</option>
+          <option value="12">최근 12주</option>
+          <option value="all">전체 기간</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="statsSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px"></div>
+
+    <div class="grid" style="margin-bottom:18px">
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">주간 업무시간 추이</div>
+        <canvas id="chartWeekly" height="180"></canvas>
+      </div>
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">Project Code별 시간 분배</div>
+        <canvas id="chartProject" height="180"></canvas>
+      </div>
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">자주 하는 업무 TOP 10 (누적 시간 기준)</div>
+        <canvas id="chartTopTasks" height="220"></canvas>
+      </div>
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">업무 대분류별 시간 분배</div>
+        <canvas id="chartCategory" height="220"></canvas>
+      </div>
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">구분별 시간 분배 (수행/입찰/기타)</div>
+        <canvas id="chartGubun" height="180"></canvas>
+      </div>
+      <div class="span2" style="background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:14px">
+        <div class="preset-group-label">정규시간 vs 조기출근·야근 비율</div>
+        <canvas id="chartOvertime" height="180"></canvas>
+      </div>
+    </div>
+
+    <div class="preset-group-label" style="margin-bottom:8px">진행 중인 업무 (마감임박순)</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr><th>Function Code</th><th>제목</th><th>Project Code</th><th>마감기한</th><th>D-day</th><th>진행도</th></tr>
+        </thead>
+        <tbody id="inProgressRows"></tbody>
+      </table>
+      <div class="empty" id="inProgressEmpty" style="display:none">진행 중인(100% 미만) 업무가 없습니다.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
       <h2 style="margin:0">누적된 업무일지</h2>
       <div class="count" id="rowCount">0건</div>
     </div>
@@ -496,6 +579,11 @@
         <select id="exportWeekStart" style="width:auto"></select>
         <span style="color:var(--ink-2);font-size:12.5px">~</span>
         <select id="exportWeekEnd" style="width:auto"></select>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="connectFileBtn" type="button" style="font-size:12px">📁 내보낼 파일 연결하기</button>
+        <span id="connectedFileLabel" style="font-size:12px;color:var(--ink-2)">연결된 파일 없음 — 내보낼 때마다 새 파일로 다운로드됩니다</span>
+        <button class="btn btn-ghost" id="disconnectFileBtn" type="button" style="font-size:12px;display:none">연결 해제</button>
       </div>
     </div>
 
@@ -751,10 +839,10 @@ const DURATION_PRESETS = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
 
 // ---------- Project Code 목록 (기본 4개 + 사용자 추가분, 전부 수정/삭제 가능, 브라우저에 저장) ----------
 const DEFAULT_PROJECTS = [
-  {code:"210025", name:"BALTIC", gubun:"수행(KPI)", archived:false},
-  {code:"260120", name:"AM4", gubun:"수행(KPI)", archived:false},
-  {code:"250177", name:"LCM", gubun:"수행(KPI)", archived:false},
-  {code:"000000", name:"GENERAL", gubun:"기타(KPI)", archived:false}
+  {code:"210025", name:"BALTIC", gubun:"수행 (KPI)", archived:false},
+  {code:"260120", name:"AM4", gubun:"수행 (KPI)", archived:false},
+  {code:"250177", name:"LCM", gubun:"수행 (KPI)", archived:false},
+  {code:"000000", name:"GENERAL", gubun:"기타 (KPI)", archived:false}
 ];
 let projects = [];
 
@@ -772,9 +860,11 @@ async function ensurePcodeSelectable(code, fallbackGubun){
       pcode.appendChild(o);
     }
   } else {
-    projects.push({ code, name: '', gubun: fallbackGubun || '수행(KPI)', archived: false });
+    projects.push({ code, name: '', gubun: fallbackGubun || '수행 (KPI)', archived: false });
     await saveProjects();
     populateProjectSelect(code);
+    hasUnexportedChanges = true;
+    updateExportReminder();
     status.textContent = `Project Code "${code}"가 목록에 없어 자동으로 등록했습니다. 필요하면 이름을 채워주세요.`;
     setTimeout(()=>status.textContent="", 4000);
   }
@@ -826,9 +916,11 @@ async function loadProjects(){
       projects.forEach(p=>{
         if(!p.gubun){
           const def = DEFAULT_PROJECTS.find(d=>d.code === p.code);
-          p.gubun = def ? def.gubun : "수행(KPI)";
+          p.gubun = def ? def.gubun : "수행 (KPI)";
           migrated = true;
         }
+        if(p.gubun === "수행(KPI)"){ p.gubun = "수행 (KPI)"; migrated = true; }
+        if(p.gubun === "기타(KPI)"){ p.gubun = "기타 (KPI)"; migrated = true; }
         if(p.archived === undefined){ p.archived = false; migrated = true; }
       });
       if(migrated) await saveProjects();
@@ -838,13 +930,17 @@ async function loadProjects(){
     }
   }catch(e){ projects = DEFAULT_PROJECTS.map(p=>({...p})); }
   populateProjectSelect();
+  renderAnalytics();
 }
 async function saveProjects(){
   const ok = await persistSet('worklog_projects', JSON.stringify(projects));
-  if(!ok) status.textContent = "Project Code 저장 중 오류가 발생했습니다.";
+  if(!ok){
+    await showDialog("Project Code 저장에 실패했습니다. 이 브라우저에서는 저장 자체가 안 되는 상태일 수 있어요 (시크릿 모드이거나, 회사 정책으로 저장소가 막혀있을 수 있습니다). 지금 입력한 내용은 창을 닫으면 사라집니다.", {showCancel:false});
+  }
+  return ok;
 }
 
-const GUBUN_OPTIONS = ["수행(KPI)", "입찰", "기타(KPI)", "기타"];
+const GUBUN_OPTIONS = ["수행 (KPI)", "입찰", "기타 (KPI)", "기타"];
 
 // 인라인 수정이 저장됐음을 눈에 보이게 확인시켜주는 효과 (테두리 잠깐 초록색으로)
 function flashSaved(el){
@@ -899,6 +995,8 @@ function renderProjManageList(){
       await saveProjects();
       populateProjectSelect();
       flashSaved(inp);
+      hasUnexportedChanges = true;
+      updateExportReminder();
       status.textContent = "저장되었습니다.";
       setTimeout(()=>status.textContent="", 1500);
     });
@@ -913,6 +1011,8 @@ function renderProjManageList(){
         await saveProjects();
         populateProjectSelect();
         renderProjManageList();
+        hasUnexportedChanges = true;
+        updateExportReminder();
         status.textContent = target.archived
           ? `"${target.code}"를 보관했습니다. 목록에서는 숨겨지고, 기존 업무일지는 그대로 유지됩니다.`
           : `"${target.code}"를 복원했습니다.`;
@@ -923,6 +1023,8 @@ function renderProjManageList(){
         await saveProjects();
         populateProjectSelect();
         renderProjManageList();
+        hasUnexportedChanges = true;
+        updateExportReminder();
       }
     });
   });
@@ -949,6 +1051,8 @@ $('saveProjBtn').addEventListener('click', async ()=>{
   await saveProjects();
   populateProjectSelect(code);
   renderProjManageList();
+  hasUnexportedChanges = true;
+  updateExportReminder();
   $('newProjCode').value = ""; $('newProjName').value = "";
   status.textContent = `Project Code "${code}"가 추가되었습니다.`;
   setTimeout(()=>status.textContent="", 2500);
@@ -1094,6 +1198,31 @@ function updateDetailPreview(){
   const titleStr = title.value || '(제목 미입력)';
   const summary = `📌 ${dateStr}  ${timeStr}  ·  ${codeStr}  ·  ${titleStr}`;
   detailPreview.textContent = summary + "\n\n" + d;
+  renderTimetablePreview();
+}
+
+// 지금 폼에 입력 중인 내용을 시간표에 "미리보기(가제)"로 살짝 겹쳐 보여줌 - 아직 저장 전이라는 걸 점선/줄무늬로 표시
+function renderTimetablePreview(){
+  document.querySelectorAll('.tt-preview-block').forEach(el=>el.remove());
+  if(editingId || (typeof fullDaySplit !== 'undefined' && fullDaySplit)) return; // 수정 중/종일 분리 모드는 생략
+  const dateVal = $('f_date') ? $('f_date').value : '';
+  const startVal = startEl.value, endVal = endEl.value;
+  if(!dateVal || !startVal || !endVal) return;
+  const s = toMinutes(startVal), en = toMinutes(endVal);
+  if(en <= s) return;
+  const track = document.querySelector(`.tt-track[data-date="${dateVal}"]`);
+  if(!track) return; // 지금 보고 있는 주가 아니면 표시하지 않음
+
+  const top = ((s - TT_START_HOUR*60)/60) * TT_HOUR_PX;
+  const height = Math.max((((en-s))/60) * TT_HOUR_PX, 22);
+  const block = document.createElement('div');
+  block.className = 'tt-block tt-preview-block';
+  block.style.top = top + 'px';
+  block.style.height = height + 'px';
+  block.style.left = '5px';
+  block.style.right = '5px';
+  block.innerHTML = `<span class="tt-code">${escapeHtml(codeField.value)||'-'}</span><span class="tt-title">${escapeHtml(title.value)||'(입력 중…)'}</span>`;
+  track.appendChild(block);
 }
 [progress,enddate,memo,title].forEach(el=>el.addEventListener('input', updateDetailPreview));
 [pcode,startEl,endEl].forEach(el=>el.addEventListener('change', updateDetailPreview));
@@ -1130,6 +1259,12 @@ async function loadEntries(){
   try{
     const raw = await persistGet('worklog_entries');
     entries = raw ? JSON.parse(raw) : [];
+    let migrated = false;
+    entries.forEach(e=>{
+      if(e.gubun === "수행(KPI)"){ e.gubun = "수행 (KPI)"; migrated = true; }
+      if(e.gubun === "기타(KPI)"){ e.gubun = "기타 (KPI)"; migrated = true; }
+    });
+    if(migrated) await saveEntries();
   }catch(e){ entries = []; }
   render();
   renderTimetable();
@@ -1143,14 +1278,18 @@ function updateExportReminder(){
 
 async function saveEntries(){
   const ok = await persistSet('worklog_entries', JSON.stringify(entries));
-  if(!ok) status.textContent = "저장 중 오류가 발생했습니다. (입력은 화면에 남아있습니다)";
   hasUnexportedChanges = true;
   updateExportReminder();
+  if(!ok){
+    await showDialog("업무일지 저장에 실패했습니다. 이 브라우저에서는 저장 자체가 안 되는 상태일 수 있어요 (시크릿 모드이거나, 회사 정책으로 저장소가 막혀있을 수 있습니다). 지금 입력한 내용은 창을 닫으면 사라지니, 지금 바로 엑셀로 내보내기 해두시는 걸 권장드립니다.", {showCancel:false});
+  }
+  return ok;
 }
 
 function render(){
   rowsBody.innerHTML = "";
   renderQuickChips();
+  renderAnalytics();
 
   const weekStartISO = toISO(ttWeekStart);
   const weekEndISO = toISO(addDays(ttWeekStart, 6));
@@ -1365,7 +1504,7 @@ async function loadEntryToForm(e){
     fcPreview.classList.remove('show');
   }
 
-  gubun.value = e.gubun || "수행(KPI)";
+  gubun.value = e.gubun || "수행 (KPI)";
   await ensurePcodeSelectable(e.pcode, e.gubun);
   pcode.value = e.pcode || "";
   syncGubunFromProject();
@@ -1394,8 +1533,8 @@ function scrollToForm(){
 function editEntry(id){
   const e = entries.find(x=>x.id===id);
   if(!e) return;
-  loadEntryToForm(e);
   editingId = e.id;
+  loadEntryToForm(e);
   updateFormModeUI();
   scrollToForm();
 }
@@ -1423,7 +1562,10 @@ async function loadPinned(){
 }
 async function savePinned(){
   const ok = await persistSet('worklog_pinned', JSON.stringify(pinnedTasks));
-  if(!ok) status.textContent = "고정 업무 저장 중 오류가 발생했습니다.";
+  if(!ok){
+    await showDialog("고정 업무 저장에 실패했습니다. 이 브라우저에서는 저장 자체가 안 되는 상태일 수 있어요.", {showCancel:false});
+  }
+  return ok;
 }
 
 function renderPinnedChips(){
@@ -1469,6 +1611,111 @@ $('pinTaskBtn').addEventListener('click', async ()=>{
   await savePinned();
   renderPinnedChips();
   status.textContent = "장기 진행 업무로 고정되었습니다.";
+  setTimeout(()=>status.textContent="", 2000);
+});
+
+// ---------- 예정된 업무 (Plans): 마감일·상세내용까지 미리 등록해두고, 나중에 그대로 불러와서 조금만 수정 ----------
+let plans = [];
+
+async function loadPlans(){
+  try{
+    const raw = await persistGet('worklog_plans');
+    plans = raw ? JSON.parse(raw) : [];
+  }catch(e){ plans = []; }
+  renderPlansChips();
+}
+async function savePlans(){
+  const ok = await persistSet('worklog_plans', JSON.stringify(plans));
+  if(!ok){
+    await showDialog("예정된 업무 저장에 실패했습니다. 이 브라우저에서는 저장 자체가 안 되는 상태일 수 있어요.", {showCancel:false});
+  }
+  return ok;
+}
+
+function renderPlansChips(){
+  const wrap = $('plansChips');
+  wrap.innerHTML = "";
+  $('plansChipsWrap').style.display = plans.length ? 'block' : 'none';
+  const sorted = plans.slice().sort((a,b)=> (a.enddate||'9999-99-99').localeCompare(b.enddate||'9999-99-99'));
+  sorted.forEach(p=>{
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.style.position = 'relative';
+    chip.style.background = '#fdf3e7';
+    chip.style.borderColor = '#f0d9ae';
+    const dday = p.enddate ? ddayLabel(p.enddate) : '';
+    chip.innerHTML = `<span class="chip-code">${escapeHtml(p.fnCode)||'-'}${dday ? ' · '+dday : ''}</span><span class="chip-title">${escapeHtml(p.title)}</span>`;
+    chip.addEventListener('click', ()=>applyPlanChip(p));
+
+    const x = document.createElement('span');
+    x.textContent = '✕';
+    x.title = '예정 업무 삭제';
+    x.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#c0392b;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;cursor:pointer';
+    x.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      plans = plans.filter(pl => pl.id !== p.id);
+      await savePlans();
+      renderPlansChips();
+    });
+    chip.style.paddingRight = '14px';
+    chip.appendChild(x);
+    wrap.appendChild(chip);
+  });
+}
+
+function ddayLabel(enddateStr){
+  if(!enddateStr) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(enddateStr+"T00:00:00");
+  const diffDays = Math.round((due - today) / 86400000);
+  if(diffDays === 0) return 'D-day';
+  if(diffDays > 0) return `D-${diffDays}`;
+  return `D+${Math.abs(diffDays)}`;
+}
+
+function applyPlanChip(p){
+  if(editingId){ editingId = null; updateFormModeUI(); } // 편집 중이던 항목을 실수로 덮어쓰지 않도록
+  const m = MASTER.find(m => m.fnCode === p.fnCode);
+  if(m){
+    taskSel.value = m.taskDesc;
+    applyMasterMatch(m);
+  } else {
+    taskSel.value = "";
+    selected = null;
+    codeField.value = p.fnCode || "";
+    fcPreview.classList.remove('show');
+  }
+  title.value = p.title || "";
+  lastAutoTitle = p.title || "";
+  if(p.gubun) gubun.value = p.gubun;
+  enddate.value = p.enddate || "";
+  progress.value = p.progress || 0;
+  memo.value = p.memo || "";
+  updateDetailPreview();
+  (async ()=>{
+    if(p.pcode){
+      await ensurePcodeSelectable(p.pcode, p.gubun);
+      pcode.value = p.pcode;
+    }
+  })();
+  title.focus();
+}
+
+$('savePlanBtn').addEventListener('click', async ()=>{
+  if(!codeField.value || !title.value.trim() || !enddate.value){
+    showDialog("업무설명(Function Code) · 제목 · 마감기한을 먼저 입력한 뒤 예정 업무로 저장해주세요.", {showCancel:false});
+    return;
+  }
+  plans.push({
+    id: Date.now()+"_"+Math.random().toString(36).slice(2,7),
+    fnCode: codeField.value, title: title.value.trim(),
+    gubun: gubun.value, pcode: pcode.value,
+    enddate: enddate.value, progress: progress.value || 0, memo: memo.value || ""
+  });
+  await savePlans();
+  renderPlansChips();
+  status.textContent = "예정된 업무로 저장되었습니다.";
   setTimeout(()=>status.textContent="", 2000);
 });
 
@@ -1523,6 +1770,224 @@ function findMaxProgressForCode(fnCode){
     if(!best || p > parseFloat(best.progress)) best = en;
   });
   return best;
+}
+
+// ---------- 업무 분석 대시보드 ----------
+let charts = {};
+function destroyChart(id){
+  if(charts[id]){ charts[id].destroy(); delete charts[id]; }
+}
+
+function getStatsRangeEntries(){
+  const rangeVal = $('statsRange') ? $('statsRange').value : '8';
+  if(rangeVal === 'all') return entries.slice();
+  const weeks = parseInt(rangeVal);
+  const cutoff = addDays(getMonday(new Date()), -(weeks-1)*7);
+  const cutoffISO = toISO(cutoff);
+  return entries.filter(e => e.date >= cutoffISO);
+}
+
+function getInProgressList(){
+  const codes = new Set(entries.map(e => e.fnCode).filter(Boolean));
+  const list = [];
+  codes.forEach(code=>{
+    const rep = findMaxProgressForCode(code);
+    if(rep && (parseFloat(rep.progress)||0) < 100) list.push(rep);
+  });
+  list.sort((a,b)=> (a.enddate||'9999-99-99').localeCompare(b.enddate||'9999-99-99'));
+  return list;
+}
+
+function computeAllWeeksSpan(){
+  if(!entries.length) return 8;
+  const dates = entries.map(e=>e.date).sort();
+  const earliest = new Date(dates[0]+"T00:00:00");
+  const weeks = Math.ceil((new Date() - getMonday(earliest)) / (7*86400000)) + 1;
+  return Math.min(Math.max(weeks,1), 52);
+}
+
+function coreMinutesOverlap(startMin, endMin){
+  const overlap = (aS,aE,bS,bE) => Math.max(0, Math.min(aE,bE)-Math.max(aS,bS));
+  return overlap(startMin,endMin,CORE_START_MIN,LUNCH_START_MIN) + overlap(startMin,endMin,LUNCH_END_MIN,CORE_END_MIN);
+}
+
+function renderStatsSummary(scoped){
+  const totalHours = scoped.reduce((s,e)=> s + (Number(e.wtime)||0), 0);
+  const weekSet = new Set(scoped.map(e=> toISO(getMonday(new Date(e.date+"T00:00:00")))));
+  const weekCount = Math.max(1, weekSet.size);
+  const avgWeekly = totalHours / weekCount;
+  const inProgress = getInProgressList().length;
+  const wrap = $('statsSummary');
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div class="stat-card"><div class="stat-label">총 업무시간</div><div class="stat-value">${totalHours.toFixed(1)}h</div><div class="stat-sub">${scoped.length}건</div></div>
+    <div class="stat-card"><div class="stat-label">주 평균 업무시간</div><div class="stat-value">${avgWeekly.toFixed(1)}h</div><div class="stat-sub">${weekCount}주 기준</div></div>
+    <div class="stat-card"><div class="stat-label">업무 건수</div><div class="stat-value">${scoped.length}건</div><div class="stat-sub">선택 기간 기록</div></div>
+    <div class="stat-card"><div class="stat-label">진행 중인 업무</div><div class="stat-value">${inProgress}건</div><div class="stat-sub">진행도 100% 미만 (전체 기간)</div></div>
+  `;
+}
+
+function renderInProgressTable(){
+  const list = getInProgressList();
+  const tbody = $('inProgressRows');
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  $('inProgressEmpty').style.display = list.length ? 'none' : 'block';
+  list.forEach(e=>{
+    const tr = document.createElement('tr');
+    const dday = e.enddate ? ddayLabel(e.enddate) : '-';
+    tr.innerHTML = `
+      <td><span class="code-pill">${escapeHtml(e.fnCode)||'-'}</span></td>
+      <td>${escapeHtml(e.title)}</td>
+      <td>${escapeHtml(e.pcode)}</td>
+      <td>${escapeHtml(e.enddate)||'-'}</td>
+      <td>${dday}</td>
+      <td class="num">${e.progress||0}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderWeeklyChart(){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartWeekly');
+  const rangeVal = $('statsRange').value;
+  const weeksCount = rangeVal === 'all' ? computeAllWeeksSpan() : parseInt(rangeVal);
+  const endWeek = getMonday(new Date());
+  const buckets = [];
+  for(let i=weeksCount-1; i>=0; i--){
+    const wStart = addDays(endWeek, -7*i);
+    const wEnd = addDays(wStart, 6);
+    const startISO = toISO(wStart), endISO = toISO(wEnd);
+    const hours = entries.filter(e=> e.date>=startISO && e.date<=endISO).reduce((s,e)=> s+(Number(e.wtime)||0), 0);
+    buckets.push({ label: `${pad(wStart.getMonth()+1)}/${pad(wStart.getDate())}`, hours: Math.round(hours*10)/10 });
+  }
+  const ctx = document.getElementById('chartWeekly');
+  if(!ctx) return;
+  charts['chartWeekly'] = new Chart(ctx, {
+    type: 'line',
+    data: { labels: buckets.map(w=>w.label), datasets: [{ label:'주간 업무시간', data: buckets.map(w=>w.hours), borderColor:'#3461eb', backgroundColor:'rgba(52,97,235,0.12)', fill:true, tension:0.25, pointRadius:3 }]},
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+
+function renderProjectChart(scoped){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartProject');
+  const map = {};
+  scoped.forEach(e=>{
+    const key = e.pcode || '(미지정)';
+    map[key] = (map[key]||0) + (Number(e.wtime)||0);
+  });
+  const arr = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const labels = arr.map(([code])=>{
+    const proj = projects.find(p=>p.code===code);
+    return proj ? `${code} ${proj.name||''}`.trim() : code;
+  });
+  const ctx = document.getElementById('chartProject');
+  if(!ctx) return;
+  charts['chartProject'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'시간', data: arr.map(([,v])=>Math.round(v*10)/10), backgroundColor:'#7c9ef5' }] },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+
+function renderTopTasksChart(scoped){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartTopTasks');
+  const map = {};
+  scoped.forEach(e=>{
+    if(!e.fnCode) return;
+    if(!map[e.fnCode]) map[e.fnCode] = { hours:0, title:e.title };
+    map[e.fnCode].hours += (Number(e.wtime)||0);
+    if(e.title) map[e.fnCode].title = e.title;
+  });
+  const arr = Object.entries(map).map(([code,v])=>({code, ...v})).sort((a,b)=>b.hours-a.hours).slice(0,10);
+  const ctx = document.getElementById('chartTopTasks');
+  if(!ctx) return;
+  charts['chartTopTasks'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: arr.map(a=>a.title||a.code), datasets: [{ label:'누적시간', data: arr.map(a=>Math.round(a.hours*10)/10), backgroundColor:'#5fb98c' }] },
+    options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}} }
+  });
+}
+
+function renderCategoryChart(scoped){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartCategory');
+  const map = {};
+  scoped.forEach(e=>{
+    const m = MASTER.find(mm=>mm.fnCode===e.fnCode);
+    const key = m ? m.majorDesc : (e.codeDesc || '기타');
+    map[key] = (map[key]||0) + (Number(e.wtime)||0);
+  });
+  const arr = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const ctx = document.getElementById('chartCategory');
+  if(!ctx) return;
+  charts['chartCategory'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: arr.map(a=>a[0]), datasets: [{ label:'시간', data: arr.map(a=>Math.round(a[1]*10)/10), backgroundColor:'#f0b95e' }] },
+    options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}} }
+  });
+}
+
+function renderGubunChart(scoped){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartGubun');
+  const map = {};
+  scoped.forEach(e=>{
+    const key = e.gubun || '(미지정)';
+    map[key] = (map[key]||0) + (Number(e.wtime)||0);
+  });
+  const labels = Object.keys(map);
+  const data = Object.values(map).map(v=>Math.round(v*10)/10);
+  const colors = ['#3461eb','#5fb98c','#f0b95e','#e2678a','#9b8cf2'];
+  const ctx = document.getElementById('chartGubun');
+  if(!ctx) return;
+  charts['chartGubun'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: labels.map((_,i)=>colors[i%colors.length]) }] },
+    options: { responsive:true, plugins:{legend:{position:'bottom', labels:{boxWidth:12,font:{size:10}}}} }
+  });
+}
+
+function renderOvertimeChart(scoped){
+  if(typeof Chart === 'undefined') return;
+  destroyChart('chartOvertime');
+  let coreMin=0, outsideMin=0;
+  scoped.forEach(e=>{
+    if(!e.start || !e.end) return;
+    const s = toMinutes(e.start), en = toMinutes(e.end);
+    const total = Math.max(0, en-s);
+    const core = coreMinutesOverlap(s,en);
+    coreMin += core;
+    outsideMin += (total-core);
+  });
+  const ctx = document.getElementById('chartOvertime');
+  if(!ctx) return;
+  charts['chartOvertime'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels:['정규시간 (08:30~17:30, 점심제외)','조기출근/야근'],
+      datasets:[{ data:[Math.round((coreMin/60)*10)/10, Math.round((outsideMin/60)*10)/10], backgroundColor:['#3461eb','#e2678a'] }]
+    },
+    options: { responsive:true, plugins:{legend:{position:'bottom', labels:{boxWidth:12,font:{size:10}}}} }
+  });
+}
+
+function renderAnalytics(){
+  if(!$('statsRange')) return;
+  const scoped = getStatsRangeEntries();
+  renderStatsSummary(scoped);
+  renderInProgressTable();
+  if(typeof Chart === 'undefined') return; // CDN 로드 실패 시 차트만 조용히 생략
+  renderWeeklyChart();
+  renderProjectChart(scoped);
+  renderTopTasksChart(scoped);
+  renderCategoryChart(scoped);
+  renderGubunChart(scoped);
+  renderOvertimeChart(scoped);
 }
 
 async function applyQuickChip(e){
@@ -1670,7 +2135,56 @@ $('exportAllChk').addEventListener('change', ()=>{
   }
 });
 
-$('exportBtn').addEventListener('click', ()=>{
+// ---------- 특정 파일에 계속 업데이트하기 (File System Access API, Chrome/Edge 전용) ----------
+let connectedFileHandle = null;
+
+function updateConnectedFileLabel(){
+  const label = $('connectedFileLabel');
+  const disconnectBtn = $('disconnectFileBtn');
+  if(connectedFileHandle){
+    label.textContent = `연결된 파일: ${connectedFileHandle.name} (내보내기 누르면 이 파일에 계속 업데이트됩니다)`;
+    label.style.color = 'var(--green)';
+    disconnectBtn.style.display = 'inline-block';
+  } else {
+    label.textContent = '연결된 파일 없음 — 내보낼 때마다 새 파일로 다운로드됩니다';
+    label.style.color = 'var(--ink-2)';
+    disconnectBtn.style.display = 'none';
+  }
+}
+
+async function verifyFileHandlePermission(handle){
+  const opts = { mode: 'readwrite' };
+  if((await handle.queryPermission(opts)) === 'granted') return true;
+  if((await handle.requestPermission(opts)) === 'granted') return true;
+  return false;
+}
+
+$('connectFileBtn').addEventListener('click', async ()=>{
+  if(!('showSaveFilePicker' in window)){
+    await showDialog("이 기능은 Chrome 또는 Edge 브라우저에서만 사용할 수 있습니다.", {showCancel:false});
+    return;
+  }
+  try{
+    connectedFileHandle = await window.showSaveFilePicker({
+      suggestedName: '업무일지.xlsx',
+      types: [{ description: 'Excel 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
+    });
+    updateConnectedFileLabel();
+    status.textContent = "파일이 연결되었습니다. 이제 '엑셀로 내보내기'를 누르면 이 파일에 계속 업데이트됩니다.";
+    setTimeout(()=>status.textContent="", 3000);
+  }catch(e){
+    // 사용자가 파일 선택을 취소한 경우 등 - 조용히 무시
+  }
+});
+
+$('disconnectFileBtn').addEventListener('click', ()=>{
+  connectedFileHandle = null;
+  updateConnectedFileLabel();
+  status.textContent = "파일 연결을 해제했습니다.";
+  setTimeout(()=>status.textContent="", 2000);
+});
+
+$('exportBtn').addEventListener('click', async ()=>{
   if(!entries.length){ status.textContent = "내보낼 업무일지가 없습니다."; return; }
 
   let target = entries;
@@ -1724,13 +2238,45 @@ $('exportBtn').addEventListener('click', ()=>{
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "업무일지");
+
+  // Project Code 목록도 같이 내보내서, 캐시가 지워지거나 다른 컴퓨터에서 가져오기 할 때 함께 복원되도록 함
+  const projHeader = ["Project Code", "프로젝트명", "구분", "보관여부"];
+  const projRows = projects.map(p=>[p.code, p.name||"", p.gubun||"", p.archived ? "Y" : "N"]);
+  const wsProj = XLSX.utils.aoa_to_sheet([projHeader, ...projRows]);
+  wsProj['!cols'] = [{wch:12},{wch:16},{wch:12},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsProj, "ProjectCode");
+
   const today = new Date();
   const fname = `업무일지_${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}${fnameSuffix}.xlsx`;
-  XLSX.writeFile(wb, fname, { cellStyles: true });
-  hasUnexportedChanges = false;
-  updateExportReminder();
-  status.textContent = "엑셀로 내보냈습니다.";
-  setTimeout(()=>status.textContent="", 2000);
+
+  if(connectedFileHandle){
+    try{
+      const hasPerm = await verifyFileHandlePermission(connectedFileHandle);
+      if(!hasPerm) throw new Error('permission denied');
+      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
+      const writable = await connectedFileHandle.createWritable();
+      await writable.write(buffer);
+      await writable.close();
+      hasUnexportedChanges = false;
+      updateExportReminder();
+      status.textContent = `연결된 파일(${connectedFileHandle.name})에 저장했습니다.`;
+      setTimeout(()=>status.textContent="", 2500);
+    }catch(err){
+      XLSX.writeFile(wb, fname, { cellStyles: true });
+      hasUnexportedChanges = false;
+      updateExportReminder();
+      status.textContent = "연결된 파일에 저장하지 못해 새 파일로 다운로드했습니다. 다시 연결해주세요.";
+      setTimeout(()=>status.textContent="", 3500);
+      connectedFileHandle = null;
+      updateConnectedFileLabel();
+    }
+  } else {
+    XLSX.writeFile(wb, fname, { cellStyles: true });
+    hasUnexportedChanges = false;
+    updateExportReminder();
+    status.textContent = "엑셀로 내보냈습니다. (Project Code 목록도 함께 저장됨)";
+    setTimeout(()=>status.textContent="", 2500);
+  }
 });
 
 // ---------- 엑셀 가져오기 (이전에 내보낸 파일을 되돌려 입력) ----------
@@ -1864,7 +2410,36 @@ $('importFileInput').addEventListener('change', async (ev)=>{
     render();
     renderTimetable();
 
-    status.textContent = `${imported.length}건을 가져왔습니다${skipped ? ` (중복 ${skipped}건 제외)` : ''}. "시작 시간/종료 시간" 열이 있으면 그 값을 그대로 쓰고, 없으면(예전 파일) 순서대로 임시 배정됩니다.`;
+    // Project Code 시트가 있으면 함께 복원 (캐시 초기화/다른 컴퓨터 대응)
+    let projAdded = 0, projUpdated = 0;
+    const projSheetName = wb.SheetNames.find(n => n === 'ProjectCode');
+    if(projSheetName){
+      const projRows = XLSX.utils.sheet_to_json(wb.Sheets[projSheetName], {defval:""});
+      projRows.forEach(row=>{
+        const code = row['Project Code'] !== undefined ? String(row['Project Code']).trim() : "";
+        if(!code) return;
+        const name = row['프로젝트명'] || "";
+        const gubun = row['구분'] || "수행 (KPI)";
+        const archived = String(row['보관여부'] || "").toUpperCase() === 'Y';
+        const existing = projects.find(p => p.code === code);
+        if(existing){
+          existing.name = name || existing.name;
+          existing.gubun = gubun || existing.gubun;
+          existing.archived = archived;
+          projUpdated++;
+        } else {
+          projects.push({ code, name, gubun, archived });
+          projAdded++;
+        }
+      });
+      if(projAdded || projUpdated){
+        await saveProjects();
+        populateProjectSelect();
+      }
+    }
+
+    status.textContent = `${imported.length}건을 가져왔습니다${skipped ? ` (중복 ${skipped}건 제외)` : ''}.`
+      + (projSheetName ? ` Project Code ${projAdded}개 추가, ${projUpdated}개 갱신.` : '');
     setTimeout(()=>status.textContent="", 5000);
   }catch(err){
     await showDialog("엑셀 파일을 읽는 중 오류가 발생했습니다. 이 프로그램에서 내보낸 파일 형식인지 확인해주세요.", {showCancel:false});
@@ -1890,6 +2465,46 @@ function toISO(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getD
 function addDays(d, n){ const nd = new Date(d); nd.setDate(nd.getDate()+n); return nd; }
 
 let ttWeekStart = getMonday(new Date());
+
+// ---------- 시간표 블록 복사/붙여넣기 ----------
+let ttClipboard = null;
+let pasteModeActive = false;
+
+function startPasteMode(entry){
+  ttClipboard = {
+    fnCode: entry.fnCode, codeDesc: entry.codeDesc, title: entry.title,
+    gubun: entry.gubun, pcode: entry.pcode, progress: entry.progress,
+    enddate: entry.enddate, memo: entry.memo, detail: entry.detail,
+    ntime: entry.ntime, nratio: entry.nratio,
+    start: entry.start, end: entry.end // 소요시간 계산용 (실제 붙여넣을 때 날짜/시간은 클릭 위치로 재계산)
+  };
+  pasteModeActive = true;
+  showPasteModeBanner();
+}
+
+function exitPasteMode(){
+  pasteModeActive = false;
+  ttClipboard = null;
+  const banner = $('pasteModeBanner');
+  if(banner) banner.remove();
+}
+
+function showPasteModeBanner(){
+  let banner = $('pasteModeBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'pasteModeBanner';
+    banner.className = 'paste-mode-banner';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+  banner.innerHTML = `<span>⧉ "${escapeHtml(ttClipboard.title)||'업무'}" 복사됨 — 붙여넣을 날짜의 시간표를 클릭하세요.</span>`;
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.style.cssText = 'padding:6px 14px;font-size:12px;flex:none';
+  cancelBtn.textContent = '취소';
+  cancelBtn.addEventListener('click', exitPasteMode);
+  banner.appendChild(cancelBtn);
+}
 
 // 더 이상 사용하지 않지만 다른 곳에서의 호출과의 호환을 위해 남겨둠
 // 같은 시간대에 겹치는 업무들을 옆으로 나란히 배치하기 위한 레이아웃 계산
@@ -2014,6 +2629,18 @@ function renderTimetable(){
       });
       block.appendChild(delX);
 
+      const copyIcon = document.createElement('span');
+      copyIcon.className = 'tt-copy-icon';
+      copyIcon.textContent = '⧉';
+      copyIcon.title = '복사 (다른 날짜에 붙여넣기)';
+      copyIcon.addEventListener('mousedown', (ev)=>{ ev.stopPropagation(); ev.preventDefault(); });
+      copyIcon.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); ev.preventDefault(); });
+      copyIcon.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        startPasteMode(e);
+      });
+      block.appendChild(copyIcon);
+
       attachResizeHandle(block, e, 'top');
       attachResizeHandle(block, e, 'bottom');
 
@@ -2024,12 +2651,59 @@ function renderTimetable(){
     ttGrid.appendChild(dayCol);
     attachDragSelect(track, dayISO);
   }
+  renderTimetablePreview();
 }
 
 function attachDragSelect(track, dayISO){
-  track.addEventListener('pointerdown', (ev)=>{
+  track.addEventListener('pointerdown', async (ev)=>{
     if(ev.target.closest('.tt-block')) return; // 기존 블록 클릭은 그대로 둠
     if(ev.pointerType === 'mouse' && ev.button !== 0) return;
+
+    if(pasteModeActive && ttClipboard){
+      ev.preventDefault();
+      const rect = track.getBoundingClientRect();
+      const clickY = ev.clientY - rect.top;
+      const clickMin = Math.round((TT_START_HOUR*60 + clickY)/30)*30;
+      const duration = toMinutes(ttClipboard.end) - toMinutes(ttClipboard.start);
+      let startMin = Math.max(TT_START_HOUR*60, Math.min(clickMin, TT_END_HOUR*60 - duration));
+      let endMin = startMin + duration;
+
+      // 점심시간(11:30~12:30)에 걸치면, 클릭 위치와 가까운 쪽(점심 전/후)으로 통째로 옮김
+      if(startMin < LUNCH_END_MIN && endMin > LUNCH_START_MIN){
+        const roomBefore = LUNCH_START_MIN - TT_START_HOUR*60; // 점심 전 확보 가능한 최대 폭
+        const fitsBefore = duration <= roomBefore;
+        const distToBefore = Math.abs(clickMin - (LUNCH_START_MIN - duration));
+        const distToAfter = Math.abs(clickMin - LUNCH_END_MIN);
+        if(fitsBefore && distToBefore <= distToAfter){
+          startMin = LUNCH_START_MIN - duration;
+        } else {
+          startMin = LUNCH_END_MIN;
+        }
+        endMin = startMin + duration;
+      }
+
+      if(endMin > TT_END_HOUR*60){ endMin = TT_END_HOUR*60; startMin = endMin - duration; }
+      if(startMin < TT_START_HOUR*60){ startMin = TT_START_HOUR*60; endMin = startMin + duration; }
+
+      const toHHMMPaste = m => pad(Math.floor(m/60))+":"+pad(m%60);
+      const startStr = toHHMMPaste(startMin), endStr = toHHMMPaste(endMin);
+      const durHours = Math.round((duration/60)*4)/4;
+      entries.push({
+        id: Date.now()+"_"+Math.random().toString(36).slice(2,7),
+        ...ttClipboard,
+        date: dayISO, start: startStr, end: endStr,
+        wtime: durHours, wratio: autoRatio(durHours),
+        updatedAt: Date.now()
+      });
+      await saveEntries();
+      render();
+      renderTimetable();
+      status.textContent = `"${ttClipboard.title||'업무'}"를 ${dayISO} ${startStr}~${endStr}에 붙여넣었습니다.`;
+      setTimeout(()=>status.textContent="", 2500);
+      exitPasteMode();
+      return;
+    }
+
     ev.preventDefault();
     if(track.setPointerCapture) try{ track.setPointerCapture(ev.pointerId); }catch(e){}
     const rect = track.getBoundingClientRect();
@@ -2062,6 +2736,23 @@ function attachDragSelect(track, dayISO){
       let startMin = Math.round((TT_START_HOUR*60 + top)/30)*30;
       let endMin = Math.round((TT_START_HOUR*60 + bottom)/30)*30;
       if(endMin <= startMin) endMin = startMin + 30;
+
+      // 점심시간(11:30~12:30)에 걸치면, 드래그 중심과 가까운 쪽(점심 전/후)으로 통째로 옮김
+      if(startMin < LUNCH_END_MIN && endMin > LUNCH_START_MIN){
+        const duration = endMin - startMin;
+        const midMin = (startMin + endMin) / 2;
+        const roomBefore = LUNCH_START_MIN - TT_START_HOUR*60;
+        const fitsBefore = duration <= roomBefore;
+        const distToBefore = Math.abs(midMin - (LUNCH_START_MIN - duration/2));
+        const distToAfter = Math.abs(midMin - (LUNCH_END_MIN + duration/2));
+        if(fitsBefore && distToBefore <= distToAfter){
+          startMin = LUNCH_START_MIN - duration;
+        } else {
+          startMin = LUNCH_END_MIN;
+        }
+        endMin = startMin + duration;
+      }
+
       startMin = Math.max(TT_START_HOUR*60, Math.min(startMin, TT_END_HOUR*60 - 30));
       endMin = Math.max(startMin + 30, Math.min(endMin, TT_END_HOUR*60));
 
@@ -2301,22 +2992,35 @@ document.querySelectorAll('.section-title').forEach(titleEl=>{
 
 // 저장소가 실제로 방문 간에 유지되는지 자체 점검
 (function checkStoragePersistence(){
+  // 1) 지금 이 순간 실제로 쓰고 다시 읽었을 때 정확히 맞는 값이 나오는지 직접 테스트
+  let writeReadOk = false;
+  try{
+    const testKey = '__worklog_storage_test__';
+    const testVal = 'test_' + Date.now() + '_' + Math.random();
+    localStorage.setItem(testKey, testVal);
+    writeReadOk = (localStorage.getItem(testKey) === testVal);
+    localStorage.removeItem(testKey);
+  }catch(e){ writeReadOk = false; }
+
+  if(!writeReadOk){
+    const banner = document.createElement('div');
+    banner.style.cssText = 'max-width:1080px;margin:0 auto 14px;padding:12px 16px;background:#fdeaea;border:1px solid #f0b8b8;border-radius:10px;color:#a12626;font-size:12.5px;line-height:1.6';
+    banner.innerHTML = '⚠ 이 브라우저에서는 지금 입력하는 내용이 저장되지 않는 것으로 확인됐습니다 (시크릿 모드이거나, 브라우저/회사 정책으로 저장소가 막혀있을 수 있어요). 창을 닫으면 내용이 사라지니, 작업 후 꼭 <b>엑셀로 내보내기</b>를 해두세요.';
+    document.body.insertBefore(banner, document.body.firstChild);
+    return; // 아래 2번 체크는 의미가 없으므로 생략
+  }
+
+  // 2) 저장은 되는데, 예전 방문 흔적은 있으나 데이터가 통째로 비어있는 경우(재방문 시 초기화되는 패턴) 감지
   try{
     const prevVisit = localStorage.getItem('worklog_visited');
     if(prevVisit === 'true' && !localStorage.getItem('worklog_entries') && !localStorage.getItem('worklog_projects')){
-      // 이전에 방문한 적은 있는데 저장된 데이터가 전혀 없다 -> 이 화면(미리보기)에서는 저장이 유지되지 않는 환경일 가능성이 높음
       const banner = document.createElement('div');
       banner.style.cssText = 'max-width:1080px;margin:0 auto 14px;padding:12px 16px;background:#fff4e0;border:1px solid #f2d49a;border-radius:10px;color:#8a5a00;font-size:12.5px;line-height:1.6';
-      banner.innerHTML = '⚠ 이 화면에서는 이전 방문 데이터가 유지되지 않는 것 같아요. Claude 안의 미리보기 화면이라면, 이 파일을 <b>다운로드해서 직접 브라우저에서 열거나</b>, GitHub Pages/Netlify 같은 곳에 올려서 <b>고정된 웹 주소</b>로 접속해서 쓰시면 저장이 정상적으로 유지됩니다.';
+      banner.innerHTML = '⚠ 이전 방문 데이터가 유지되지 않는 것 같아요. Claude 안의 미리보기 화면이라면, 이 파일을 <b>다운로드해서 직접 브라우저에서 열거나</b>, GitHub Pages/Netlify 같은 곳에 올려서 <b>고정된 웹 주소</b>로 접속해서 쓰시면 저장이 정상적으로 유지됩니다.';
       document.body.insertBefore(banner, document.body.firstChild);
     }
     localStorage.setItem('worklog_visited', 'true');
-  }catch(e){
-    const banner = document.createElement('div');
-    banner.style.cssText = 'max-width:1080px;margin:0 auto 14px;padding:12px 16px;background:#fdeaea;border:1px solid #f0b8b8;border-radius:10px;color:#a12626;font-size:12.5px;line-height:1.6';
-    banner.innerHTML = '⚠ 이 브라우저 환경에서는 로컬 저장소를 사용할 수 없어 입력 내용이 저장되지 않습니다. 이 파일을 다운로드해서 직접 브라우저(Chrome 등)에서 열어주세요.';
-    document.body.insertBefore(banner, document.body.firstChild);
-  }
+  }catch(e){ /* 위 1번에서 이미 걸러졌을 것 */ }
 })();
 
 // ---------- 새 버전 자동 감지 ----------
@@ -2360,6 +3064,8 @@ window.addEventListener('beforeunload', (ev)=>{
   }
 });
 
+$('statsRange').addEventListener('change', renderAnalytics);
+
 // 초기화
 $('f_date').value = toISO(new Date());
 $('f_enddate').value = $('f_date').value;
@@ -2368,6 +3074,7 @@ updateDetailPreview();
 applyStartAndDuration();
 loadProjects();
 loadPinned();
+loadPlans();
 loadEntries();
 
 </script>
